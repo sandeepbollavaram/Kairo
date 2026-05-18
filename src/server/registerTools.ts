@@ -1,0 +1,292 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { SessionManager, RecordKind } from '../core/session/sessionManager.js';
+import { ok, fail } from './responses.js';
+import { KairoError } from '../utils/errors.js';
+
+const RECORD_KINDS = [
+  'file',
+  'decision',
+  'command',
+  'error',
+  'error-resolved',
+  'retry',
+  'note',
+  'completed',
+  'pending',
+  'blocker',
+] as const;
+
+const CHANGE_KINDS = ['created', 'modified', 'deleted', 'renamed'] as const;
+const RISKS = ['low', 'medium', 'high'] as const;
+const CHECKPOINT_REASONS = ['manual', 'pressure', 'session-end'] as const;
+
+/** Maps the flat `kairo_record` input onto the typed RecordKind union. */
+function toRecordInput(i: {
+  kind: (typeof RECORD_KINDS)[number];
+  path?: string | undefined;
+  changeKind?: (typeof CHANGE_KINDS)[number] | undefined;
+  risk?: (typeof RISKS)[number] | undefined;
+  bytes?: number | undefined;
+  note?: string | undefined;
+  summary?: string | undefined;
+  rationale?: string | undefined;
+  command?: string | undefined;
+  exitCode?: number | undefined;
+  message?: string | undefined;
+  context?: string | undefined;
+  what?: string | undefined;
+  item?: string | undefined;
+}): RecordKind {
+  const need = <T>(v: T | undefined, field: string): T => {
+    if (v === undefined || v === '') {
+      throw new KairoError(`kairo_record kind="${i.kind}" requires "${field}".`);
+    }
+    return v;
+  };
+  switch (i.kind) {
+    case 'file':
+      return {
+        kind: 'file',
+        path: need(i.path, 'path'),
+        ...(i.changeKind ? { changeKind: i.changeKind } : {}),
+        ...(i.risk ? { risk: i.risk } : {}),
+        ...(i.bytes !== undefined ? { bytes: i.bytes } : {}),
+        ...(i.note !== undefined ? { note: i.note } : {}),
+      };
+    case 'decision':
+      return {
+        kind: 'decision',
+        summary: need(i.summary, 'summary'),
+        ...(i.rationale !== undefined ? { rationale: i.rationale } : {}),
+      };
+    case 'command':
+      return {
+        kind: 'command',
+        command: need(i.command, 'command'),
+        ...(i.exitCode !== undefined ? { exitCode: i.exitCode } : {}),
+        ...(i.note !== undefined ? { note: i.note } : {}),
+      };
+    case 'error':
+      return {
+        kind: 'error',
+        message: need(i.message, 'message'),
+        ...(i.context !== undefined ? { context: i.context } : {}),
+      };
+    case 'error-resolved':
+      return { kind: 'error-resolved', message: need(i.message, 'message') };
+    case 'retry':
+      return { kind: 'retry', ...(i.what !== undefined ? { what: i.what } : {}) };
+    case 'note':
+      return { kind: 'note', note: need(i.note, 'note') };
+    case 'completed':
+      return { kind: 'completed', item: need(i.item, 'item') };
+    case 'pending':
+      return { kind: 'pending', item: need(i.item, 'item') };
+    case 'blocker':
+      return { kind: 'blocker', item: need(i.item, 'item') };
+  }
+}
+
+export function registerTools(server: McpServer, sessions: SessionManager): void {
+  server.registerTool(
+    'kairo_session_start',
+    {
+      title: 'Start / resume a Kairo session',
+      description:
+        'Begin a Kairo session. Returns the continuation brief from prior work so you ' +
+        'can resume WITHOUT rescanning the repository. Call this before any other Kairo ' +
+        'tool. Storage location is fixed by KAIRO_PROJECT_ROOT (or cwd) at server launch; ' +
+        'projectRoot here is recorded for the brief.',
+      inputSchema: {
+        agent: z.string().min(1).describe('Agent identifier, e.g. "claude-code".'),
+        task: z.string().min(1).describe('What this session is trying to accomplish.'),
+        projectRoot: z.string().optional().describe('Informational project root path.'),
+      },
+    },
+    async ({ agent, task, projectRoot }) => {
+      try {
+        const r = await sessions.startSession({
+          agent,
+          task,
+          projectRoot: projectRoot ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd(),
+        });
+        const summary = r.resumed
+          ? `Resumed. A prior continuation brief was found and is included below — resume from it; do not rescan the repo.`
+          : `New session started. No prior continuation brief found.`;
+        return ok(
+          `${summary}\n\nSession: ${r.sessionId}` +
+            (r.priorBrief ? `\n\n--- PRIOR CONTINUATION BRIEF ---\n${r.priorBrief}` : ''),
+          { sessionId: r.sessionId, resumed: r.resumed },
+          r.pressure,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_session_status',
+    {
+      title: 'Kairo session status',
+      description: 'Current session ledger summary, pressure score, and directive.',
+      inputSchema: {},
+    },
+    () => {
+      try {
+        const { state, pressure } = sessions.status();
+        return ok(
+          `Session ${state.id} (${state.status}) — ${Object.keys(state.changedFiles).length} files changed, ` +
+            `${state.errors.filter((e) => !e.resolved).length} unresolved error(s).`,
+          {
+            id: state.id,
+            agent: state.agent,
+            task: state.task,
+            status: state.status,
+            changedFiles: Object.values(state.changedFiles),
+            decisions: state.decisions,
+            pendingWork: state.pendingWork,
+            completedWork: state.completedWork,
+            blockers: state.blockers,
+            errors: state.errors,
+            lastCheckpointId: state.lastCheckpointId ?? null,
+          },
+          pressure,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_record',
+    {
+      title: 'Record an engineering event',
+      description:
+        'Log a file change / decision / command / error / retry / note / work item to ' +
+        'Kairo memory. Returns the updated pressure directive.',
+      inputSchema: {
+        kind: z.enum(RECORD_KINDS),
+        path: z.string().optional(),
+        changeKind: z.enum(CHANGE_KINDS).optional(),
+        risk: z.enum(RISKS).optional().describe('Omit to let Kairo infer from the path.'),
+        bytes: z.number().int().nonnegative().optional(),
+        note: z.string().optional(),
+        summary: z.string().optional(),
+        rationale: z.string().optional(),
+        command: z.string().optional(),
+        exitCode: z.number().int().optional(),
+        message: z.string().optional(),
+        context: z.string().optional(),
+        what: z.string().optional(),
+        item: z.string().optional(),
+      },
+    },
+    async (input) => {
+      try {
+        const pressure = await sessions.record(toRecordInput(input));
+        return ok(`Recorded ${input.kind}.`, { recorded: input.kind }, pressure);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_heartbeat',
+    {
+      title: 'Session heartbeat',
+      description:
+        'Cheap pulse. Pass `reread` with a file path if you re-read a file you had ' +
+        'already seen — repeated re-reads are the strongest context-loss signal.',
+      inputSchema: {
+        reread: z.string().optional().describe('Path of a file you re-read.'),
+        note: z.string().optional(),
+        turns: z.number().int().nonnegative().optional().describe('Turns since last heartbeat.'),
+      },
+    },
+    async (args) => {
+      try {
+        const pressure = await sessions.heartbeat(args);
+        return ok('Heartbeat recorded.', { directive: pressure.directive }, pressure);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_checkpoint',
+    {
+      title: 'Create a durable checkpoint',
+      description:
+        'Freeze a sanitized, resumable checkpoint and generate the next-agent ' +
+        'continuation brief. Call this on a CHECKPOINT_NOW directive.',
+      inputSchema: {
+        reason: z.enum(CHECKPOINT_REASONS).optional(),
+        completed: z.array(z.string()).optional(),
+        remaining: z.array(z.string()).optional(),
+        blockers: z.array(z.string()).optional(),
+      },
+    },
+    async (args) => {
+      try {
+        const r = await sessions.checkpoint({
+          reason: args.reason ?? 'manual',
+          ...(args.completed ? { completed: args.completed } : {}),
+          ...(args.remaining ? { remaining: args.remaining } : {}),
+          ...(args.blockers ? { blockers: args.blockers } : {}),
+        });
+        return ok(
+          `Checkpoint ${r.checkpoint.id} created.\n\n--- CONTINUATION BRIEF ---\n${r.brief}`,
+          { checkpointId: r.checkpoint.id, continuationRef: r.checkpoint.continuationRef },
+          r.pressure,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_continuation',
+    {
+      title: 'Fetch latest continuation brief',
+      description: 'Return the most recent continuation brief (the next-agent handoff).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const brief = await sessions.latestContinuation();
+        if (!brief) {
+          return ok('No continuation brief exists yet.', { found: false });
+        }
+        return ok(brief, { found: true });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_session_end',
+    {
+      title: 'End the Kairo session',
+      description: 'Write a closing checkpoint + continuation brief and finalize the session.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const r = await sessions.endSession();
+        return ok(
+          `Session ended. Closing checkpoint ${r.checkpoint.id}.\n\n--- CONTINUATION BRIEF ---\n${r.brief}`,
+          { checkpointId: r.checkpoint.id },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+}

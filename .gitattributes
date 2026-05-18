@@ -1,0 +1,9 @@
+# Normalize line endings: LF in the repo on every platform. Keeps Prettier and CI
+# deterministic regardless of contributor OS.
+* text=auto eol=lf
+
+# Binary / generated artifacts that must never be line-ending normalized.
+*.png binary
+*.jpg binary
+*.ico binary
+package-lock.json -text

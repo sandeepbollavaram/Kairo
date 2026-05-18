@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Kairo runtime state (per-project memory — never committed by Kairo itself)
+.kairo/
+
+# Claude Code / agent local files — never push these
+.claude/
+CLAUDE.md
+.mcp.json
+
+# Editor / OS
+.DS_Store
+.idea/
+*.log
+
+# Env / secrets — defense in depth (Kairo also redacts, but never track these)
+.env
+.env.*
+!.env.example
+*.pem
+*.key

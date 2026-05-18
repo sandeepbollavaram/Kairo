@@ -1,0 +1,12 @@
+src/
+tests/
+docs/
+.github/
+.kairo/
+tsconfig*.json
+eslint.config.js
+.prettierrc.json
+.prettierignore
+vitest.config.ts
+*.tsbuildinfo
+coverage/

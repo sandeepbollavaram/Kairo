@@ -1,0 +1,299 @@
+import type { StorageAdapter } from '../../storage/storageAdapter.js';
+import type {
+  ChangeKind,
+  Checkpoint,
+  PressureSnapshot,
+  RiskLevel,
+  SessionState,
+} from '../../types/domain.js';
+import type { EventType, KairoEvent } from '../../types/events.js';
+import { EVENT_SCHEMA_VERSION } from '../../types/events.js';
+import type { EventPayloads } from './eventPayloads.js';
+import { applyEvent, reduceAll, repeatedRereads, unresolvedErrors } from './reducer.js';
+import { computePressure } from '../../pressure/pressureModel.js';
+import { CheckpointManager, type CheckpointInput } from '../checkpoint/checkpointManager.js';
+import { inferRisk } from '../risk/riskHeuristics.js';
+import type { Clock } from '../../utils/time.js';
+import { newId } from '../../utils/ids.js';
+import { KairoError } from '../../utils/errors.js';
+
+export interface StartResult {
+  sessionId: string;
+  resumed: boolean;
+  /** Continuation brief from a prior session, if any — return this to the agent. */
+  priorBrief?: string;
+  pressure: PressureSnapshot;
+}
+
+export type RecordKind =
+  | {
+      kind: 'file';
+      path: string;
+      changeKind?: ChangeKind;
+      risk?: RiskLevel;
+      bytes?: number;
+      note?: string;
+    }
+  | { kind: 'decision'; summary: string; rationale?: string }
+  | { kind: 'command'; command: string; exitCode?: number; note?: string }
+  | { kind: 'error'; message: string; context?: string }
+  | { kind: 'error-resolved'; message: string }
+  | { kind: 'retry'; what?: string }
+  | { kind: 'note'; note: string }
+  | { kind: 'completed'; item: string }
+  | { kind: 'pending'; item: string }
+  | { kind: 'blocker'; item: string };
+
+/**
+ * Orchestrates the continuity loop for a single agent connection. Holds the active
+ * session projection in memory (rebuilt from the log on start) and drives every write
+ * through the adapter, which enforces redaction.
+ */
+export class SessionManager {
+  private current: SessionState | undefined;
+  private readonly checkpoints: CheckpointManager;
+
+  constructor(
+    private readonly adapter: StorageAdapter,
+    private readonly clock: Clock,
+  ) {
+    this.checkpoints = new CheckpointManager(adapter, clock);
+  }
+
+  async init(): Promise<void> {
+    await this.adapter.init();
+  }
+
+  /** Begins a new session, surfacing the prior continuation brief to avoid rescanning. */
+  async startSession(args: {
+    agent: string;
+    task: string;
+    projectRoot: string;
+  }): Promise<StartResult> {
+    const priorBrief = await this.adapter.loadLatestContinuation();
+    const sessionId = newId(this.clock.now());
+
+    this.current = undefined;
+    await this.append(sessionId, 'session.started', {
+      agent: args.agent,
+      task: args.task,
+      projectRoot: args.projectRoot,
+      startedAt: this.clock.iso(),
+    });
+
+    const resumed = priorBrief !== undefined;
+    if (resumed) {
+      await this.append(sessionId, 'session.resumed', { fromContinuation: 'latest' });
+    }
+
+    return {
+      sessionId,
+      resumed,
+      ...(priorBrief !== undefined ? { priorBrief } : {}),
+      pressure: this.pressure(),
+    };
+  }
+
+  async record(input: RecordKind): Promise<PressureSnapshot> {
+    const sid = this.requireSession().id;
+    switch (input.kind) {
+      case 'file':
+        await this.append(sid, 'file.changed', {
+          path: input.path,
+          changeKind: input.changeKind ?? 'modified',
+          risk: input.risk ?? inferRisk(input.path),
+          ...(input.bytes !== undefined ? { bytes: input.bytes } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+        });
+        break;
+      case 'decision':
+        await this.append(sid, 'decision.recorded', {
+          summary: input.summary,
+          ...(input.rationale !== undefined ? { rationale: input.rationale } : {}),
+        });
+        break;
+      case 'command':
+        await this.append(sid, 'command.run', {
+          command: input.command,
+          ...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+        });
+        break;
+      case 'error':
+        await this.append(sid, 'error.recorded', {
+          message: input.message,
+          ...(input.context !== undefined ? { context: input.context } : {}),
+        });
+        break;
+      case 'error-resolved':
+        await this.append(sid, 'error.resolved', { message: input.message });
+        break;
+      case 'retry':
+        await this.append(
+          sid,
+          'retry.recorded',
+          input.what !== undefined ? { what: input.what } : {},
+        );
+        break;
+      case 'note':
+        await this.append(sid, 'note.recorded', { note: input.note });
+        break;
+      case 'completed':
+        await this.append(sid, 'work.completed', { item: input.item });
+        break;
+      case 'pending':
+        await this.append(sid, 'work.pending', { item: input.item });
+        break;
+      case 'blocker':
+        await this.append(sid, 'blocker.recorded', { item: input.item });
+        break;
+    }
+    return this.pressure();
+  }
+
+  async heartbeat(args: {
+    reread?: string | undefined;
+    note?: string | undefined;
+    turns?: number | undefined;
+  }): Promise<PressureSnapshot> {
+    const sid = this.requireSession().id;
+    await this.append(sid, 'heartbeat', {
+      ...(args.reread !== undefined ? { reread: args.reread } : {}),
+      ...(args.note !== undefined ? { note: args.note } : {}),
+      ...(args.turns !== undefined ? { turns: args.turns } : {}),
+    });
+    return this.pressure();
+  }
+
+  async checkpoint(
+    input: CheckpointInput,
+  ): Promise<{ checkpoint: Checkpoint; brief: string; pressure: PressureSnapshot }> {
+    const state = this.requireSession();
+    const pressure = this.pressure();
+    const out = await this.checkpoints.create(state, pressure, input);
+    await this.append(state.id, 'checkpoint.created', {
+      checkpointId: out.checkpoint.id,
+      reason: input.reason,
+    });
+    return {
+      checkpoint: out.checkpoint,
+      brief: out.continuationMarkdown,
+      pressure: this.pressure(),
+    };
+  }
+
+  async endSession(): Promise<{ checkpoint: Checkpoint; brief: string }> {
+    const state = this.requireSession();
+    const out = await this.checkpoints.create(state, this.pressure(), { reason: 'session-end' });
+    await this.append(state.id, 'checkpoint.created', {
+      checkpointId: out.checkpoint.id,
+      reason: 'session-end',
+    });
+    await this.append(state.id, 'session.ended', {});
+    return { checkpoint: out.checkpoint, brief: out.continuationMarkdown };
+  }
+
+  status(): { state: SessionState; pressure: PressureSnapshot } {
+    return { state: this.requireSession(), pressure: this.pressure() };
+  }
+
+  /** Latest persisted checkpoint across all sessions (for the MCP resource). */
+  latestCheckpoint(): Promise<Checkpoint | undefined> {
+    return this.adapter.loadLatestCheckpoint();
+  }
+
+  /** Latest persisted continuation brief, if any. */
+  latestContinuation(): Promise<string | undefined> {
+    return this.adapter.loadLatestContinuation();
+  }
+
+  async priorSessions(): Promise<SessionState[]> {
+    const all = reduceAll(await this.adapter.readEvents());
+    return [...all.values()];
+  }
+
+  // ── internals ────────────────────────────────────────────────────────────
+
+  private requireSession(): SessionState {
+    if (!this.current) {
+      throw new KairoError(
+        'No active Kairo session.',
+        'Call kairo_session_start before any other Kairo tool.',
+      );
+    }
+    return this.current;
+  }
+
+  private async append<K extends EventType & keyof EventPayloads>(
+    sessionId: string,
+    type: K,
+    payload: EventPayloads[K],
+  ): Promise<void> {
+    const event: KairoEvent<EventPayloads[K]> = {
+      schema: EVENT_SCHEMA_VERSION,
+      id: newId(this.clock.now()),
+      ts: this.clock.iso(),
+      sessionId,
+      type,
+      payload,
+    };
+    // Append to the durable log first, then update the in-memory projection and
+    // persist the derived snapshot. Order matters for crash consistency.
+    await this.adapter.appendEvent(event);
+    if (!this.current || this.current.id !== sessionId) {
+      this.current = applyEvent(this.blankState(sessionId), event);
+    } else {
+      this.current = applyEvent(this.current, event);
+    }
+    await this.adapter.saveSessionSnapshot(this.current);
+  }
+
+  private blankState(id: string): SessionState {
+    return {
+      id,
+      agent: 'unknown',
+      task: '',
+      projectRoot: '',
+      startedAt: this.clock.iso(),
+      lastActivityAt: this.clock.iso(),
+      status: 'active',
+      changedFiles: {},
+      decisions: [],
+      commands: [],
+      errors: [],
+      completedWork: [],
+      pendingWork: [],
+      blockers: [],
+      retries: 0,
+      heartbeats: 0,
+      toolCalls: 0,
+      cumulativeDiffBytes: 0,
+      rereadCounts: {},
+    };
+  }
+
+  private pressure(): PressureSnapshot {
+    const s = this.current;
+    if (!s) {
+      return computePressure({
+        toolCalls: 0,
+        changedFiles: 0,
+        cumulativeDiffBytes: 0,
+        retries: 0,
+        unresolvedErrors: 0,
+        repeatedRereads: 0,
+        elapsedMs: 0,
+      });
+    }
+    const startedMs = Date.parse(s.startedAt) || this.clock.now();
+    return computePressure({
+      toolCalls: s.toolCalls,
+      changedFiles: Object.keys(s.changedFiles).length,
+      cumulativeDiffBytes: s.cumulativeDiffBytes,
+      retries: s.retries,
+      unresolvedErrors: unresolvedErrors(s),
+      repeatedRereads: repeatedRereads(s),
+      elapsedMs: Math.max(0, this.clock.now() - startedMs),
+    });
+  }
+}
