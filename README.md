@@ -16,6 +16,13 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.7.1 — Cross-worker memory freshness.** The v0.7.0 caveat is fixed: the vector
+index now also keys on a deterministic `memoryFingerprint` (hash of the built chunk
+set), so a decision/checkpoint/worker change invalidates stale cross-worker memory
+automatically — chunks rebuild cheaply offline, only the embed step is skipped on a
+true match. `kairo_memory_refresh` is idempotent; checkpoint memory is shared while
+private reasoning stays worker-isolated. Deterministic, offline-safe, namespace-safe.
+
 **v0.7.0 — Coordinated cognition & distributed engineering memory.** Multiple AI
 workers share coherent continuity over one event-sourced ledger — not autonomous
 agents. Cooperative leases (`kairo_lease`) over task/path/module scopes with
@@ -164,6 +171,7 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_graph`               | Mermaid module/service/architecture/pipeline graph (no rescan)       |
 | `kairo_memory_search`       | Hybrid explainable semantic recall (use instead of rescanning)       |
 | `kairo_memory_index`        | Build/refresh memory; fingerprint-keyed, no re-embed on hit          |
+| `kairo_memory_refresh`      | Ensure shared memory is current; idempotent, namespace-safe          |
 | `kairo_memory_digest`       | Compressed salience-ordered architecture memory                      |
 | `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)           |
 | `kairo_coordination_status` | Active workers, held leases, ownership                               |

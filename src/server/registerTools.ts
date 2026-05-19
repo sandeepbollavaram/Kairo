@@ -635,6 +635,35 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
   );
 
   server.registerTool(
+    'kairo_memory_refresh',
+    {
+      title: 'Refresh shared coordination memory',
+      description:
+        'Ensure shared memory reflects the latest decisions/checkpoints/worker state ' +
+        'before retrieving (v0.7.1). Auto-invalidated by a deterministic memory ' +
+        'fingerprint — rebuilds only if the chunk set changed, so repeated calls are ' +
+        'idempotent. Private worker-namespace memory is never leaked.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const r = await sessions.refreshMemory();
+        if (!r) {
+          return ok('No repo intelligence yet. Start a session first.', { refreshed: false });
+        }
+        return ok(
+          r.rebuilt
+            ? `Memory refreshed — rebuilt (${r.chunks} chunks); shared memory is now current.`
+            : `Memory already fresh — no rebuild needed (${r.chunks} chunks).`,
+          { refreshed: true, ...r },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'kairo_memory_digest',
     {
       title: 'Compressed architectural memory',

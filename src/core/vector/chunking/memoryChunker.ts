@@ -163,7 +163,9 @@ export function chunkSessionMemory(
       runtimeReachable: false,
       neighbors: [],
       ts: checkpoint.createdAt,
-      namespace: namespaceOf(checkpoint.sessionId),
+      // Checkpoints are team-level engineering continuity → shared (v0.7.1).
+      // (Private *reasoning* stays in worker-namespaced decision chunks.)
+      namespace: 'workspace',
     });
   }
   return chunks;

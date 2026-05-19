@@ -78,6 +78,7 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_graph',
         'kairo_memory_search',
         'kairo_memory_index',
+        'kairo_memory_refresh',
         'kairo_memory_digest',
         'kairo_lease',
         'kairo_coordination_status',
@@ -140,6 +141,9 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
 
     const digest = await client.callTool({ name: 'kairo_memory_digest', arguments: {} });
     expect(textOf(digest)).toMatch(/Compressed Architectural Memory|No memory indexed/);
+
+    const refresh = await client.callTool({ name: 'kairo_memory_refresh', arguments: {} });
+    expect(textOf(refresh)).toMatch(/Memory (refreshed|already fresh)|No repo intelligence/);
 
     const lease = await client.callTool({
       name: 'kairo_lease',

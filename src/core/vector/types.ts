@@ -49,9 +49,15 @@ export interface Embedder {
 }
 
 export interface VectorIndex {
-  schema: 2;
+  schema: 3;
   /** Repo fingerprint this index was built for (anti-recompute key). */
   fingerprint: string;
+  /**
+   * Deterministic hash of the built chunk set (v0.7.1). Captures session/decision/
+   * checkpoint/namespace changes that the repo fingerprint does NOT, so cross-worker
+   * memory cannot go stale while still skipping the embed step on a true match.
+   */
+  memoryFingerprint: string;
   embedderId: string;
   dim: number;
   builtAt: string;

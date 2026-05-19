@@ -13,6 +13,7 @@ import { resolveProviderFromEnv, deterministicProvider } from '../providers/regi
 import { chunkRepoIntelligence, chunkSessionMemory, chunkDocs } from '../chunking/memoryChunker.js';
 import { retrieve, type RankContext } from '../retrieval/hybridRetriever.js';
 import { architectureDigest } from '../compression/architectureDigest.js';
+import { computeMemoryFingerprint } from './memoryFingerprint.js';
 import { logger } from '../../../utils/logger.js';
 
 export interface IndexInputs {
@@ -27,6 +28,7 @@ export interface IndexInputs {
 export interface IndexResult {
   fingerprint: string;
   embedderId: string;
+  memoryFingerprint: string;
   chunks: number;
   reused: boolean;
   /** True if a configured remote provider failed and deterministic was used. */
@@ -96,30 +98,38 @@ export class MemoryEngine {
   }
 
   async index(inputs: IndexInputs, force = false): Promise<IndexResult> {
+    // Build chunks first (cheap, offline, deterministic). Only the embed step is
+    // skipped on a true match — so session/decision/checkpoint changes cannot make
+    // cross-worker memory stale (v0.7.1).
+    const chunks = await this.buildChunks(inputs);
+    const memoryFingerprint = computeMemoryFingerprint(chunks);
     const existing = await this.adapter.loadVectorIndex();
     if (
       !force &&
       existing &&
+      existing.schema === 3 &&
       existing.fingerprint === inputs.intel.fingerprint &&
-      existing.embedderId === this.primary.id
+      existing.embedderId === this.primary.id &&
+      existing.memoryFingerprint === memoryFingerprint
     ) {
       return {
         fingerprint: existing.fingerprint,
         embedderId: existing.embedderId,
+        memoryFingerprint: existing.memoryFingerprint,
         chunks: existing.chunks.length,
         reused: true,
         fellBack: false,
       };
     }
-    const chunks = await this.buildChunks(inputs);
     const { vectors, provider, fellBack } = await this.embedAll(chunks.map((c) => c.text));
     const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: vectors[i]! }));
     const idx: VectorIndex = {
-      schema: 2,
+      schema: 3,
       fingerprint: inputs.intel.fingerprint,
+      memoryFingerprint,
       embedderId: provider.id, // the provider ACTUALLY used
       dim: provider.dim,
-      builtAt: new Date(0).toISOString(), // deterministic; freshness via fingerprint
+      builtAt: new Date(0).toISOString(), // deterministic; freshness via fingerprints
       chunks: embedded,
     };
     await this.adapter.saveVectorIndex(idx);
@@ -131,6 +141,7 @@ export class MemoryEngine {
     return {
       fingerprint: idx.fingerprint,
       embedderId: idx.embedderId,
+      memoryFingerprint: idx.memoryFingerprint,
       chunks: embedded.length,
       reused: false,
       fellBack,
@@ -140,7 +151,7 @@ export class MemoryEngine {
   /** Load only an index whose embedder matches the active primary provider. */
   private async loadValid(): Promise<VectorIndex | undefined> {
     const idx = await this.adapter.loadVectorIndex();
-    if (!idx || idx.schema !== 2) return undefined;
+    if (!idx || idx.schema !== 3) return undefined;
     if (idx.embedderId !== this.primary.id && idx.embedderId !== this.fallback.id) {
       return undefined;
     }

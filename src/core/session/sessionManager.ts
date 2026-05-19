@@ -256,6 +256,9 @@ export class SessionManager {
       checkpointId: out.checkpoint.id,
       reason: input.reason,
     });
+    // Refresh shared memory so this checkpoint is visible to other workers and to
+    // this brief's own recall (auto-invalidated by the memory fingerprint, v0.7.1).
+    await this.refreshMemory();
     const brief = out.continuationMarkdown + (await this.recallSection(state.task));
     if (brief !== out.continuationMarkdown) {
       await this.adapter.saveContinuation(out.checkpoint.continuationRef, brief);
@@ -279,6 +282,7 @@ export class SessionManager {
       reason: 'session-end',
     });
     await this.append(state.id, 'session.ended', {});
+    await this.refreshMemory();
     const brief = out.continuationMarkdown + (await this.recallSection(state.task));
     if (brief !== out.continuationMarkdown) {
       await this.adapter.saveContinuation(out.checkpoint.continuationRef, brief);
@@ -446,6 +450,16 @@ export class SessionManager {
   async searchMemory(query: RetrievalQuery): Promise<RetrievalResult[]> {
     const checkpoint = await this.adapter.loadLatestCheckpoint();
     return this.memory.search(query, { checkpoint, namespace: this.namespace });
+  }
+
+  /**
+   * Ensure shared memory reflects the latest session/decision/checkpoint state
+   * (v0.7.1). Auto-invalidated by the memory fingerprint: rebuilds only when the
+   * chunk set actually changed, so repeated calls are idempotent and offline-safe.
+   */
+  async refreshMemory(): Promise<{ rebuilt: boolean; chunks: number } | undefined> {
+    const r = await this.indexMemory();
+    return r ? { rebuilt: !r.reused, chunks: r.chunks } : undefined;
   }
 
   /** Deterministic compressed architectural memory (reduces rescanning). */

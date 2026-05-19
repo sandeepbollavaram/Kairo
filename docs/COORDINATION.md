@@ -59,6 +59,18 @@ conflict prevention at a glance.
 - Lease expiry is evaluated against an explicit clock; `state(asOf)` is reproducible.
 - Denials are written to the non-secret audit log for traceability.
 
+### Shared-memory freshness (v0.7.1)
+
+The v0.7.0 caveat — cross-worker session memory could go stale because the vector
+index was keyed only by repo fingerprint — is **fixed**. The index now also keys on
+a deterministic `memoryFingerprint` (hash of the built chunk set), so a decision,
+checkpoint, or worker-namespace change invalidates it automatically. Chunks are
+rebuilt cheaply offline; only the embed step is skipped on a true match.
+`kairo_memory_refresh` makes this explicit and **idempotent** (rebuilds only on
+real change); checkpoint/session-end auto-refresh. Checkpoint memory is **shared**
+(`workspace`) so other workers see continuity; private reasoning stays in
+worker-namespaced decision chunks. Verified by tests + a 2-worker dogfood.
+
 ## Honest limitations
 
 - **Cooperative file-based coordination, not partition-tolerant consensus.**

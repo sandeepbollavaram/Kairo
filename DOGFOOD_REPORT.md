@@ -361,3 +361,48 @@ cooperative leases, memory namespaces with retrieval isolation, and a distribute
 checkpoint timeline — with every core principle intact (deterministic-first,
 explainable, architecture-grounded, checkpoint-safe, offline-safe, retrieval never
 embedding-only). The freshness caveat is documented honestly rather than oversold.
+
+---
+
+# Addendum — v0.7.1 Cross-worker memory freshness (dogfood)
+
+Fixes the v0.7.0 caveat (cross-worker session memory could go stale because the
+index was keyed only by repo fingerprint). Two workers on the Kairo repo, shared
+`.kairo/`, real `SessionManager` paths.
+
+| Probe                                                             | Expected                  | Result            |
+| ----------------------------------------------------------------- | ------------------------- | ----------------- |
+| B baseline refresh (already indexed at startSession)              | reused, no rebuild        | rebuilt=`false` ✓ |
+| A records a decision (no auto-refresh) → B `kairo_memory_refresh` | **rebuild** (invalidated) | rebuilt=`true` ✓  |
+| B refresh again                                                   | idempotent                | rebuilt=`false` ✓ |
+| B sees A's shared **checkpoint** chunk (`workspace`)              | visible                   | `true` ✓          |
+| B sees A's **private decision** (`alice`)                         | filtered                  | `false` ✓         |
+| `memoryStats` across calls                                        | identical                 | `true` ✓          |
+
+## Findings
+
+- **The caveat is fixed.** A decision by worker A (which does not change the repo
+  fingerprint and does not auto-refresh) now invalidates B's view via the
+  deterministic `memoryFingerprint`; B's refresh rebuilds and then is idempotent.
+- **Namespace-safe under refresh:** shared checkpoint continuity is visible to B;
+  A's private decision is never returned to B.
+- **Deterministic & offline:** pure order-independent chunk hash; no network;
+  byte-stable replay.
+- **Anti-rescan preserved:** chunks are rebuilt (cheap, offline) but the embed step
+  is skipped on a true match — the expensive path is still cached.
+
+## Honest notes
+
+- An earlier dogfood probe used a top-8 hybrid search to look for the checkpoint
+  chunk and reported a false negative — a _ranking_ artifact on the 30+-chunk Kairo
+  repo (one low-degree session chunk buried by structural chunks under the weak
+  default embedder), **not** a freshness failure. The probe was corrected to inspect
+  invalidation/rebuild directly (and use a wide search); the deterministic unit
+  tests had already proven the mechanism. Reported here rather than hidden.
+- Unchanged limitations still stand: cooperative (not enforced) leases; lexical
+  default embedder; file-based, not partition-tolerant consensus.
+
+## Verdict
+
+v0.7.1 succeeds: shared coordination memory is **fresh, deterministic,
+namespace-safe, and explainable**. Safe to proceed to v0.8.0.

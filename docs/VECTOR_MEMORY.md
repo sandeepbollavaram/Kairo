@@ -75,8 +75,13 @@ Deterministic: pure over inputs, fixed precision, total order `(score desc, id a
 
 ## Anti-rescan property (the success condition)
 
-- The index is keyed by **repo fingerprint + embedder id**. A fingerprint match →
-  **no re-embedding** (same cache discipline as repo intelligence).
+- The index is keyed by **repo fingerprint + embedder id + memory fingerprint**
+  (v0.7.1). The memory fingerprint is a deterministic, order-independent hash of the
+  built chunk set, so a stable repo fingerprint no longer lets cross-worker
+  session/decision/checkpoint memory go stale. Chunks are built first (cheap,
+  offline); only the **embed** step is skipped on a true match → anti-rescan kept,
+  staleness eliminated. `kairo_memory_refresh` rebuilds only if the chunk set
+  changed (idempotent); checkpoint/session-end auto-refresh.
 - `kairo_session_start` builds/reuses the index automatically.
 - Every continuation brief auto-carries a **"Semantic architecture recall"** section
   retrieved for the session task, so the next agent resumes with architecture
@@ -87,11 +92,12 @@ Deterministic: pure over inputs, fixed precision, total order `(score desc, id a
 
 ## MCP surface
 
-| Tool                  | Purpose                                               |
-| --------------------- | ----------------------------------------------------- |
-| `kairo_memory_search` | hybrid explainable recall (use instead of rescanning) |
-| `kairo_memory_index`  | build/refresh; fingerprint-keyed, no re-embed on hit  |
-| `kairo_memory_digest` | compressed salience-ordered architecture memory       |
+| Tool                   | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `kairo_memory_search`  | hybrid explainable recall (use instead of rescanning) |
+| `kairo_memory_index`   | build/refresh; fingerprint-keyed, no re-embed on hit  |
+| `kairo_memory_refresh` | ensure shared memory is current; idempotent (v0.7.1)  |
+| `kairo_memory_digest`  | compressed salience-ordered architecture memory       |
 
 ## Honest limitations
 

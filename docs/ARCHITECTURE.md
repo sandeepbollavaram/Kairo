@@ -259,6 +259,14 @@ Three decisions keep it aligned with Kairo's principles:
    so the next agent resumes with context rather than rescanning — the concrete
    mechanism behind the v0.6.0 success condition.
 
+**v0.7.1 freshness fix.** The index also keys on a deterministic `memoryFingerprint`
+(hash of the built chunk set), not just the repo fingerprint. Decisions/checkpoints/
+worker-namespace changes therefore invalidate it automatically; chunks rebuild
+cheaply offline and only the embed step is skipped on a true match. This closes the
+v0.7.0 cross-worker staleness caveat without weakening anti-rescan, determinism, or
+offline-safety. Checkpoint chunks are shared (`workspace`); private reasoning stays
+worker-namespaced.
+
 All persistence flows through the redaction boundary. Future (multi-agent/shared
 cognition, evolution timelines, distributed stores) are additional chunk kinds,
 embedder providers, and `VectorStore` adapters behind the same interfaces.

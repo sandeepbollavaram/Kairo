@@ -6,6 +6,44 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05-19
+
+Fixes the v0.7.0 cross-worker session-memory-freshness caveat before any v0.8.0
+enterprise work is built on it.
+
+### Fixed
+
+- **Stale cross-worker memory.** The vector index was keyed only by
+  `repoFingerprint + embedderId`, so decisions/checkpoints/worker-namespace changes
+  (which don't change the repo fingerprint) did not invalidate it. Added a
+  **deterministic `memoryFingerprint`** = hash of the built chunk set; the index is
+  reused only when `repoFingerprint + embedderId + memoryFingerprint` all match.
+  Chunks are built first (cheap, offline, deterministic) so only the embed step is
+  skipped on a true match — anti-rescan preserved, staleness eliminated.
+- Index `schema` 2 → 3 (older indexes rebuild automatically).
+
+### Added
+
+- **`kairo_memory_refresh`** — ensure shared memory reflects the latest
+  decisions/checkpoints before retrieving; idempotent (rebuilds only if the chunk
+  set changed); never leaks private worker-namespace memory.
+- `SessionManager.refreshMemory()`; checkpoint/session-end now auto-refresh so the
+  just-created checkpoint is immediately visible to other workers and to the brief.
+
+### Changed
+
+- Checkpoint chunks are now **shared** (`workspace` namespace) — engineering
+  continuity is team-level. Private *reasoning* stays in worker-namespaced decision
+  chunks (isolation preserved).
+
+### Notes
+
+- Deterministic & offline-safe: `memoryFingerprint` is a pure, order-independent
+  hash; replay is byte-stable; no network. Dogfood (2 workers on the Kairo repo):
+  A's decision invalidates B's view, B's refresh rebuilds then is idempotent, B sees
+  the shared checkpoint but never A's private decision, `memoryStats` identical
+  across calls.
+
 ## [0.7.0] - 2026-05-19
 
 Coordinated cognition & distributed engineering memory — coordination
@@ -270,7 +308,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...v0.6.0
