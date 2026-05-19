@@ -70,6 +70,27 @@ describe('module graph collapse', () => {
     expect(g.nodes.length).toBeLessThanOrEqual(10);
     expect(g.truncated).toBe(true);
   });
+
+  // Regression: dogfood found monorepo/nested-src layouts collapsed an entire
+  // package to one node, dropping all intra-package edges as self-edges.
+  it('keeps intra-package structure for packages/<pkg>/src/** layouts', () => {
+    const files = [
+      'packages/zod/src/types/a.ts',
+      'packages/zod/src/types/b.ts',
+      'packages/zod/src/checks/c.ts',
+      'packages/bench/index.ts',
+    ];
+    const g = buildModuleGraph(
+      [
+        ['packages/zod/src/types/a.ts', 'packages/zod/src/checks/c.ts'], // zod/types → zod/checks
+        ['packages/bench/index.ts', 'packages/zod/src/types/b.ts'], // bench → zod/types
+      ],
+      files,
+    );
+    const labels = g.nodes.map((n) => n.label).sort();
+    expect(labels).toEqual(['bench', 'zod/checks', 'zod/types']);
+    expect(g.edges).toHaveLength(2); // both survive — not collapsed to self-edges
+  });
 });
 
 describe('mermaid renderer', () => {
@@ -104,6 +125,7 @@ function intel(partial: Partial<RepoIntelligence>): RepoIntelligence {
       totalBytes: 0,
       byExtension: {},
       topLevelDirs: [],
+      sourceDirs: [],
       truncated: false,
     },
     languages: { byFiles: {}, primary: 'TypeScript' },
@@ -144,12 +166,29 @@ describe('derived graphs', () => {
           totalBytes: 0,
           byExtension: {},
           topLevelDirs: ['api', 'core', 'db'],
+          sourceDirs: [],
           truncated: false,
         },
       }),
     );
     expect(g.nodes.map((n) => n.label)).toEqual(['Interface', 'Domain', 'Data']);
     expect(g.edges).toHaveLength(2);
+  });
+
+  it('architecture graph also reads layers nested under src/', () => {
+    const g = buildArchitectureGraph(
+      intel({
+        inventory: {
+          totalFiles: 0,
+          totalBytes: 0,
+          byExtension: {},
+          topLevelDirs: ['src', 'tests'],
+          sourceDirs: ['controllers', 'services', 'models'],
+          truncated: false,
+        },
+      }),
+    );
+    expect(g.nodes.map((n) => n.label)).toEqual(['Interface', 'Domain', 'Data']);
   });
 
   it('pipeline graph includes test/build stages and CI nodes', () => {

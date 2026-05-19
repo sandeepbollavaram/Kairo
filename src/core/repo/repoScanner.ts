@@ -16,6 +16,8 @@ import { logger } from '../../utils/logger.js';
 
 const MAX_PARSE_BYTES = 256 * 1024;
 const MAX_PARSED_FILES = 6000;
+/** Top-level dirs whose children are treated as architecture-layer candidates. */
+const SOURCE_ROOT_DIRS = new Set(['src', 'lib', 'app', 'sources']);
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -102,6 +104,7 @@ export class RepoScanner {
     const pathSizeEntries: string[] = [];
     const manifestContents: Record<string, string> = {};
     const topLevelDirs = new Set<string>();
+    const sourceDirs = new Set<string>();
     const ciWorkflows: string[] = [];
     const sourceFiles = new Set<string>();
     const rawImports: RawImport[] = [];
@@ -124,6 +127,12 @@ export class RepoScanner {
         if (entry.isDirectory()) {
           if (IGNORED_DIRS.has(entry.name)) continue;
           if (depth === 0) topLevelDirs.add(entry.name);
+          // Children of a top-level source root surface as architecture-layer
+          // candidates (most TS projects nest layers under src/).
+          if (depth === 1) {
+            const parent = dir.split(sep).pop();
+            if (parent && SOURCE_ROOT_DIRS.has(parent)) sourceDirs.add(entry.name);
+          }
           await visit(abs, depth + 1);
         } else if (entry.isFile()) {
           if (totalFiles >= maxFiles) {
@@ -182,6 +191,7 @@ export class RepoScanner {
       totalBytes,
       byExtension,
       topLevelDirs: [...topLevelDirs].sort(),
+      sourceDirs: [...sourceDirs].sort(),
       truncated,
     };
     const languages = this.languageBreakdown(byLang);

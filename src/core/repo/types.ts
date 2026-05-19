@@ -41,12 +41,14 @@ export interface RepoInventory {
   /** extension (lowercased, no dot) → count. */
   byExtension: Record<string, number>;
   topLevelDirs: string[];
+  /** Immediate subdirectories of a top-level source root (src/lib/app), if any. */
+  sourceDirs: string[];
   /** True if traversal hit the safety cap and is therefore partial. */
   truncated: boolean;
 }
 
 /** Bump when the cached artifact shape changes; older caches are then ignored. */
-export const INTELLIGENCE_SCHEMA = 2;
+export const INTELLIGENCE_SCHEMA = 3;
 
 export interface RepoIntelligence {
   schema: typeof INTELLIGENCE_SCHEMA;

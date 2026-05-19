@@ -6,6 +6,29 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-19
+
+Patch from a structured dogfood of v0.5.0 against three real repos (Kairo, zod,
+nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
+
+### Fixed
+
+- **Module graph collapsed entire packages to a single node** on monorepo and
+  nested-`src` layouts (`packages/<pkg>/src/**`), dropping all intra-package edges
+  as self-edges (zod 504 file-edges → 6 graph edges; nest 3304 → 7). `groupOf` now
+  locates the deepest source segment and groups by owning package + dirs under it
+  (zod → 11 edges; nest → 45, honestly truncated). Regression test added.
+- **Architecture graph ignored `src/`-nested layers**, so the common layout
+  (incl. Kairo itself) got a useless 0-edge fallback. Added
+  `RepoInventory.sourceDirs`; the architecture graph now reads source subdirs
+  (Kairo: 0 → `Interface → Domain → Data`). `server|cli|cmd|grpc` added to the
+  Interface layer rule.
+
+### Changed
+
+- `INTELLIGENCE_SCHEMA` 2 → 3 (adds `sourceDirs`). Older caches auto-invalidate and
+  regenerate — mechanism validated during the dogfood.
+
 ## [0.5.0] - 2026-05-19
 
 ### Added
@@ -119,7 +142,8 @@ All notable changes to Kairo are documented here. The format is based on
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...v0.3.0

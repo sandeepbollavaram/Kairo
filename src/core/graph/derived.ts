@@ -53,7 +53,7 @@ export function buildServiceGraph(intel: RepoIntelligence): RepoGraph {
 
 const LAYER_RULES: Array<{ test: RegExp; layer: string; order: number }> = [
   {
-    test: /^(api|routes?|controllers?|handlers?|graphql|http|web|pages?|app)$/i,
+    test: /^(api|routes?|controllers?|handlers?|graphql|grpc|http|web|server|pages?|app|cli|cmd)$/i,
     layer: 'Interface',
     order: 0,
   },
@@ -67,22 +67,35 @@ const LAYER_RULES: Array<{ test: RegExp; layer: string; order: number }> = [
 ];
 
 export function buildArchitectureGraph(intel: RepoIntelligence): RepoGraph {
+  // Most TS projects nest layers under src/, so consider source subdirs too.
+  const candidates = [...intel.inventory.topLevelDirs, ...intel.inventory.sourceDirs];
   const found = new Map<string, number>();
-  for (const d of intel.inventory.topLevelDirs) {
+  for (const d of candidates) {
     for (const r of LAYER_RULES) {
       if (r.test.test(d)) found.set(r.layer, r.order);
     }
   }
   if (found.size === 0) {
-    // Fall back to listing the actual top-level dirs as opaque modules.
-    const dirs = intel.inventory.topLevelDirs.slice(0, 20);
+    // Fall back to listing the actual layer-candidate dirs as opaque modules.
+    const dirs = (
+      intel.inventory.sourceDirs.length > 0
+        ? intel.inventory.sourceDirs
+        : intel.inventory.topLevelDirs
+    ).slice(0, 20);
+    const pool =
+      intel.inventory.sourceDirs.length > 0
+        ? intel.inventory.sourceDirs
+        : intel.inventory.topLevelDirs;
     return {
       kind: 'architecture',
       title: 'Architecture graph',
       nodes: dirs.map((d, i) => node(`d${i}`, d)),
       edges: [],
-      truncated: intel.inventory.topLevelDirs.length > 20,
-      note: 'No conventional layers detected; showing top-level directories only.',
+      truncated: pool.length > 20,
+      note:
+        intel.inventory.sourceDirs.length > 0
+          ? 'No conventional layers detected; showing source modules.'
+          : 'No conventional layers detected; showing top-level directories only.',
     };
   }
   const ordered = [...found.entries()].sort((a, b) => a[1] - b[1]).map(([l]) => l);
