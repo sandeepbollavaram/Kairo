@@ -6,6 +6,40 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-19
+
+Coordinated cognition & distributed engineering memory — coordination
+infrastructure, not autonomous-agent hype. See
+[COORDINATION.md](docs/COORDINATION.md) and
+[ADR-0007](docs/adr/0007-coordinated-cognition.md).
+
+### Added
+
+- **`src/core/coordination/`** — `CoordinationManager`, a pure deterministic
+  projection of the shared event log. No network service, no consensus.
+- **Cooperative leases** over `task` / `path` / `module` scopes (ancestor overlap):
+  `kairo_lease` acquire/renew/release, with explainable GRANTED/DENIED + conflicting
+  holder. Deterministic conflict resolution by log order (earliest wins → later
+  `superseded`); TTL expiry evaluated against the clock. Advisory (ADR-0002).
+- **Workers & memory namespaces**: `kairo_session_start` gains `worker` + `namespace`
+  (default = per-worker isolation). Shared knowledge stays in `workspace`; a
+  worker's session/decision memory is **filtered out of other workers' retrieval** —
+  a deterministic pre-ranking step, not an embedding change.
+- **Distributed checkpoint graph**: checkpoints carry owning worker + parent link;
+  `kairo_timeline` renders the cross-worker engineering timeline (Mermaid).
+- `kairo_coordination_status`: active workers, held leases, ownership, expiries.
+- New events: `worker.registered`, `lease.acquired|renewed|released` (one shared
+  ledger). Lease denials written to the non-secret audit log.
+
+### Notes
+
+- Honest limitation (documented, not hidden): cooperative file-based coordination,
+  **not** partition-tolerant consensus — `O_APPEND` line atomicity + deterministic
+  log-order projection, not locking. Two workers that ignore a denial can still both
+  act; `superseded` makes the collision auditable.
+- Determinism preserved: state is a stable ts-only fold of the log (equal-ts events
+  keep append/causal order); re-projection is byte-identical.
+
 ## [0.6.1] - 2026-05-19
 
 Embedding provider layer — a stronger semantic substrate **without** weakening
@@ -236,7 +270,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...v0.5.2

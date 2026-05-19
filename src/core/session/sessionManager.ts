@@ -35,6 +35,8 @@ import { renderGraphMarkdown } from '../graph/mermaid.js';
 import type { GraphKind, RepoGraph } from '../graph/types.js';
 import { MemoryEngine } from '../vector/memory/memoryEngine.js';
 import type { RetrievalQuery, RetrievalResult } from '../vector/types.js';
+import { CoordinationManager } from '../coordination/coordinationManager.js';
+import type { CoordinationState, LeaseDecision, LeaseScopeKind } from '../coordination/types.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
@@ -83,9 +85,12 @@ export type RecordKind =
 export class SessionManager {
   private current: SessionState | undefined;
   private projectRoot = '';
+  private workerId = 'default';
+  private namespace = 'workspace';
   private readonly checkpoints: CheckpointManager;
   private readonly scanner: RepoScanner;
   private readonly memory: MemoryEngine;
+  private readonly coordination: CoordinationManager;
 
   constructor(
     private readonly adapter: StorageAdapter,
@@ -94,6 +99,7 @@ export class SessionManager {
     this.checkpoints = new CheckpointManager(adapter, clock);
     this.scanner = new RepoScanner(clock);
     this.memory = new MemoryEngine(adapter);
+    this.coordination = new CoordinationManager(adapter, clock);
   }
 
   async init(): Promise<void> {
@@ -105,9 +111,15 @@ export class SessionManager {
     agent: string;
     task: string;
     projectRoot: string;
+    worker?: string | undefined;
+    namespace?: string | undefined;
   }): Promise<StartResult> {
     const priorBrief = await this.adapter.loadLatestContinuation();
     const sessionId = newId(this.clock.now());
+
+    this.workerId = args.worker?.trim() || args.agent;
+    // Default: per-worker isolation. Pass namespace:"workspace" to share session memory.
+    this.namespace = args.namespace?.trim() || this.workerId;
 
     this.current = undefined;
     await this.append(sessionId, 'session.started', {
@@ -116,6 +128,7 @@ export class SessionManager {
       projectRoot: args.projectRoot,
       startedAt: this.clock.iso(),
     });
+    await this.coordination.registerWorker(sessionId, this.workerId, this.namespace, args.agent);
 
     const resumed = priorBrief !== undefined;
     if (resumed) {
@@ -238,7 +251,7 @@ export class SessionManager {
   ): Promise<{ checkpoint: Checkpoint; brief: string; pressure: PressureSnapshot }> {
     const state = this.requireSession();
     const pressure = this.pressure();
-    const out = await this.checkpoints.create(state, pressure, input);
+    const out = await this.checkpoints.create(state, pressure, await this.withCoordination(input));
     await this.append(state.id, 'checkpoint.created', {
       checkpointId: out.checkpoint.id,
       reason: input.reason,
@@ -256,7 +269,11 @@ export class SessionManager {
 
   async endSession(): Promise<{ checkpoint: Checkpoint; brief: string }> {
     const state = this.requireSession();
-    const out = await this.checkpoints.create(state, this.pressure(), { reason: 'session-end' });
+    const out = await this.checkpoints.create(
+      state,
+      this.pressure(),
+      await this.withCoordination({ reason: 'session-end' }),
+    );
     await this.append(state.id, 'checkpoint.created', {
       checkpointId: out.checkpoint.id,
       reason: 'session-end',
@@ -411,22 +428,24 @@ export class SessionManager {
     if (!intelligence) return undefined;
     const sessions = await this.priorSessions();
     const checkpoint = await this.adapter.loadLatestCheckpoint();
+    const nsMap = await this.coordination.sessionNamespaceMap();
     const r = await this.memory.index(
       {
         intel: intelligence,
         sessions,
         checkpoint,
         projectRoot: this.projectRoot || intelligence.projectRoot,
+        namespaceOf: (sid) => nsMap.get(sid) ?? 'workspace',
       },
       force,
     );
     return { chunks: r.chunks, reused: r.reused };
   }
 
-  /** Hybrid, explainable semantic recall over architecture memory. */
+  /** Hybrid, explainable semantic recall — isolated to this worker's namespace. */
   async searchMemory(query: RetrievalQuery): Promise<RetrievalResult[]> {
     const checkpoint = await this.adapter.loadLatestCheckpoint();
-    return this.memory.search(query, { checkpoint });
+    return this.memory.search(query, { checkpoint, namespace: this.namespace });
   }
 
   /** Deterministic compressed architectural memory (reduces rescanning). */
@@ -443,7 +462,7 @@ export class SessionManager {
     try {
       const results = await this.memory.search(
         { text: task, limit: 6 },
-        { checkpoint: await this.adapter.loadLatestCheckpoint() },
+        { checkpoint: await this.adapter.loadLatestCheckpoint(), namespace: this.namespace },
       );
       if (results.length === 0) return '';
       const lines = results.map(
@@ -458,6 +477,54 @@ export class SessionManager {
     } catch {
       return '';
     }
+  }
+
+  // ── Coordinated cognition (v0.7.0) ───────────────────────────────────────
+
+  /** Acquire a cooperative lease over a task/path/module scope. */
+  async acquireLease(args: {
+    scopeKind: LeaseScopeKind;
+    scope: string;
+    ttlSeconds?: number;
+  }): Promise<LeaseDecision> {
+    const sid = this.requireSession().id;
+    return this.coordination.acquire({
+      sessionId: sid,
+      workerId: this.workerId,
+      scopeKind: args.scopeKind,
+      scope: args.scope,
+      ttlMs: Math.max(1, args.ttlSeconds ?? 1800) * 1000,
+    });
+  }
+
+  async renewLease(leaseId: string, ttlSeconds = 1800): Promise<LeaseDecision> {
+    const sid = this.requireSession().id;
+    return this.coordination.renew(sid, this.workerId, leaseId, Math.max(1, ttlSeconds) * 1000);
+  }
+
+  async releaseLease(leaseId: string): Promise<LeaseDecision> {
+    const sid = this.requireSession().id;
+    return this.coordination.release(sid, this.workerId, leaseId);
+  }
+
+  coordinationStatus(): Promise<CoordinationState> {
+    return this.coordination.state();
+  }
+
+  /** Distributed checkpoint graph (engineering timeline) as Mermaid markdown. */
+  async timeline(): Promise<{ markdown: string; checkpoints: number }> {
+    const graph = await this.coordination.timelineGraph();
+    return { markdown: renderGraphMarkdown(graph), checkpoints: graph.nodes.length };
+  }
+
+  /** Augment a checkpoint with owning worker + parent checkpoint (the DAG link). */
+  private async withCoordination(input: CheckpointInput): Promise<CheckpointInput> {
+    const parent = await this.adapter.loadLatestCheckpoint();
+    return {
+      ...input,
+      ownerWorkerId: this.workerId,
+      ...(parent ? { parentCheckpointId: parent.id } : {}),
+    };
   }
 
   // ── internals ────────────────────────────────────────────────────────────

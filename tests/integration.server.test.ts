@@ -79,6 +79,9 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_memory_search',
         'kairo_memory_index',
         'kairo_memory_digest',
+        'kairo_lease',
+        'kairo_coordination_status',
+        'kairo_timeline',
       ]),
     );
   });
@@ -138,6 +141,14 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     const digest = await client.callTool({ name: 'kairo_memory_digest', arguments: {} });
     expect(textOf(digest)).toMatch(/Compressed Architectural Memory|No memory indexed/);
 
+    const lease = await client.callTool({
+      name: 'kairo_lease',
+      arguments: { action: 'acquire', scopeKind: 'path', scope: 'src/payment' },
+    });
+    expect(textOf(lease)).toMatch(/GRANTED: Lease granted/);
+    const status = await client.callTool({ name: 'kairo_coordination_status', arguments: {} });
+    expect(textOf(status)).toMatch(/Active leases \(1\)/);
+
     const cp = await client.callTool({
       name: 'kairo_checkpoint',
       arguments: { reason: 'manual', completed: ['charge path'] },
@@ -149,6 +160,9 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
 
     const end = await client.callTool({ name: 'kairo_session_end', arguments: {} });
     expect(textOf(end)).toContain('Session ended');
+
+    const timeline = await client.callTool({ name: 'kairo_timeline', arguments: {} });
+    expect(textOf(timeline)).toContain('flowchart TD');
   });
 
   it('persisted the expected .kairo artifacts on disk', async () => {

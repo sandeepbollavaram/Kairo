@@ -118,6 +118,9 @@ export interface Checkpoint {
   risk: RiskAssessment;
   /** Filename of the generated continuation brief markdown. */
   continuationRef: string;
+  /** Coordination (v0.7.0): owning worker + prior checkpoint, forming the DAG. */
+  ownerWorkerId?: string;
+  parentCheckpointId?: string;
 }
 
 // ── Risk engine (v0.3.0) ────────────────────────────────────────────────────

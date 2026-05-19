@@ -115,12 +115,15 @@ export function chunkRepoIntelligence(intel: RepoIntelligence): MemoryChunk[] {
     neighbors: [],
   });
 
-  return chunks;
+  // Repo intelligence is shared knowledge — workspace namespace (ADR-0007).
+  return chunks.map((c) => ({ ...c, namespace: 'workspace' }));
 }
 
 export function chunkSessionMemory(
   sessions: SessionState[],
   checkpoint: Checkpoint | undefined,
+  /** sessionId → coordination namespace; defaults to the shared workspace. */
+  namespaceOf: (sessionId: string) => string = () => 'workspace',
 ): MemoryChunk[] {
   const chunks: MemoryChunk[] = [];
 
@@ -140,6 +143,7 @@ export function chunkSessionMemory(
       runtimeReachable: false,
       neighbors: [],
       ts: d.ts,
+      namespace: namespaceOf(sid),
     });
   }
 
@@ -159,6 +163,7 @@ export function chunkSessionMemory(
       runtimeReachable: false,
       neighbors: [],
       ts: checkpoint.createdAt,
+      namespace: namespaceOf(checkpoint.sessionId),
     });
   }
   return chunks;
@@ -211,5 +216,6 @@ export async function chunkDocs(projectRoot: string): Promise<MemoryChunk[]> {
       );
     }
   }
-  return out;
+  // Docs/ADRs are shared knowledge — workspace namespace (ADR-0007).
+  return out.map((c) => ({ ...c, namespace: 'workspace' }));
 }

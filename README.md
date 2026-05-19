@@ -16,6 +16,15 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.7.0 — Coordinated cognition & distributed engineering memory.** Multiple AI
+workers share coherent continuity over one event-sourced ledger — not autonomous
+agents. Cooperative leases (`kairo_lease`) over task/path/module scopes with
+explainable, deterministic conflict resolution; memory namespaces isolate each
+worker's session memory while shared architecture stays common; a distributed
+checkpoint graph (`kairo_timeline`) gives a coherent engineering timeline. Honest
+scope: cooperative file-based coordination on a shared/synced `.kairo/`, **not**
+network consensus.
+
 **v0.6.1 — Embedding provider layer.** The embedder is now pluggable
 (`KAIRO_EMBEDDER=openai|voyage|ollama|custom`) via one OpenAI/Ollama-compatible HTTP
 provider — but `deterministic` stays the default (offline, byte-stable) and a remote
@@ -134,28 +143,31 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.6.0)
+## MCP surface (v0.7.0)
 
-| Tool                   | Purpose                                                              |
-| ---------------------- | -------------------------------------------------------------------- |
-| `kairo_session_start`  | Begin/resume; returns prior brief + cached repo intelligence         |
-| `kairo_session_status` | Current ledger summary + pressure + directive                        |
-| `kairo_record`         | Log a file change / decision / command / error / retry / note        |
-| `kairo_heartbeat`      | Cheap pulse; returns pressure + directive                            |
-| `kairo_checkpoint`     | Create a durable, sanitized, resumable checkpoint                    |
-| `kairo_continuation`   | Fetch the latest continuation brief for the next agent               |
-| `kairo_session_end`    | Finalize the session with a closing checkpoint                       |
-| `kairo_repo_scan`      | Cached repo intelligence; `force` to rescan                          |
-| `kairo_repo_intel`     | Cached repo intelligence summary (no scan)                           |
-| `kairo_assess`         | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD) |
-| `kairo_git_status`     | Read-only git context (branch, ahead/behind, tag, recent commits)    |
-| `kairo_commit_message` | Conventional-Commits message from session memory (no commit)         |
-| `kairo_changelog`      | Keep-a-Changelog fragment from the session (no file edit)            |
-| `kairo_release_plan`   | Semver bump + tag + release notes proposal (no tag/push)             |
-| `kairo_graph`          | Mermaid module/service/architecture/pipeline graph (no rescan)       |
-| `kairo_memory_search`  | Hybrid explainable semantic recall (use instead of rescanning)       |
-| `kairo_memory_index`   | Build/refresh memory; fingerprint-keyed, no re-embed on hit          |
-| `kairo_memory_digest`  | Compressed salience-ordered architecture memory                      |
+| Tool                        | Purpose                                                              |
+| --------------------------- | -------------------------------------------------------------------- |
+| `kairo_session_start`       | Begin/resume; returns prior brief + cached repo intelligence         |
+| `kairo_session_status`      | Current ledger summary + pressure + directive                        |
+| `kairo_record`              | Log a file change / decision / command / error / retry / note        |
+| `kairo_heartbeat`           | Cheap pulse; returns pressure + directive                            |
+| `kairo_checkpoint`          | Create a durable, sanitized, resumable checkpoint                    |
+| `kairo_continuation`        | Fetch the latest continuation brief for the next agent               |
+| `kairo_session_end`         | Finalize the session with a closing checkpoint                       |
+| `kairo_repo_scan`           | Cached repo intelligence; `force` to rescan                          |
+| `kairo_repo_intel`          | Cached repo intelligence summary (no scan)                           |
+| `kairo_assess`              | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD) |
+| `kairo_git_status`          | Read-only git context (branch, ahead/behind, tag, recent commits)    |
+| `kairo_commit_message`      | Conventional-Commits message from session memory (no commit)         |
+| `kairo_changelog`           | Keep-a-Changelog fragment from the session (no file edit)            |
+| `kairo_release_plan`        | Semver bump + tag + release notes proposal (no tag/push)             |
+| `kairo_graph`               | Mermaid module/service/architecture/pipeline graph (no rescan)       |
+| `kairo_memory_search`       | Hybrid explainable semantic recall (use instead of rescanning)       |
+| `kairo_memory_index`        | Build/refresh memory; fingerprint-keyed, no re-embed on hit          |
+| `kairo_memory_digest`       | Compressed salience-ordered architecture memory                      |
+| `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)           |
+| `kairo_coordination_status` | Active workers, held leases, ownership                               |
+| `kairo_timeline`            | Distributed checkpoint graph (engineering timeline, Mermaid)         |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

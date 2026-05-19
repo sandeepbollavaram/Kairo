@@ -309,3 +309,55 @@ v0.6.1 succeeds: semantic embeddings can now strengthen retrieval **without**
 reducing deterministic architectural correctness, and the default stays offline and
 byte-stable. The provider layer is the foundation for v0.7.0+ (semantic routing,
 distributed cognition) with no redesign.
+
+---
+
+# Addendum — v0.7.0 Coordinated Cognition (dogfood)
+
+Two workers (`alice`, `bob`) sharing one `.kairo/` on the Kairo repo, driven through
+the real `SessionManager` paths.
+
+| Check                                            | Result                                                                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| alice acquires `path:src/core`                   | GRANTED                                                                                                                      |
+| bob acquires overlapping `path:src/core/session` | **DENIED** — reason names holder `alice` + expiry                                                                            |
+| bob acquires disjoint `path:src/server`          | GRANTED                                                                                                                      |
+| workers tracked w/ namespaces                    | `alice[alice], bob[bob]`                                                                                                     |
+| active leases                                    | `alice:src/core`, `bob:src/server`                                                                                           |
+| distributed checkpoint graph                     | 2 checkpoints, 1 parent edge; owners `alice`/`bob`; bob.parent set                                                           |
+| namespace isolation                              | bob does **not** see alice's private decision; **does** see shared structural; alice does **not** see bob's private decision |
+| determinism                                      | coordination projection byte-identical across repeated calls                                                                 |
+
+## Findings
+
+- **Conflict prevention works and is explainable**: the denial carried the
+  conflicting worker and expiry, not just a boolean. Ancestor/descendant path
+  overlap (`src/core` blocks `src/core/session`) behaved as designed.
+- **Distributed checkpoint graph is coherent**: both workers' checkpoints linked
+  into one timeline DAG with correct ownership.
+- **Memory isolation holds deterministically**: shared architecture is common;
+  per-worker session/decision memory is filtered out of other workers' retrieval
+  _before_ ranking — not an embedding effect.
+- **Deterministic & crash-safe**: pure log projection; re-projection identical.
+
+## Honest limitations (confirmed, documented)
+
+- **Session/decision memory is fingerprint-keyed.** The dogfood had to call
+  `indexMemory(force)` after recording decisions, because adding a decision does not
+  change the repo fingerprint so the cached index is otherwise reused. This is the
+  v0.6 design point (cheap, anti-rescan) surfacing under coordination: cross-worker
+  _session-memory_ freshness needs a force/refresh or a fingerprint change. Stated,
+  not hidden; a scheduled/triggered reindex is future work.
+- **Cooperative, not enforced.** A denied lease is advisory; two workers that ignore
+  it can still both act. `superseded` makes the collision auditable after the fact.
+  This is by design (ADR-0002/0007), not a defect — but it is not a distributed
+  lock.
+- Same-host / shared-volume only; not partition-tolerant consensus.
+
+## Verdict
+
+v0.7.0 delivers coordination infrastructure — shared ledger, deterministic
+cooperative leases, memory namespaces with retrieval isolation, and a distributed
+checkpoint timeline — with every core principle intact (deterministic-first,
+explainable, architecture-grounded, checkpoint-safe, offline-safe, retrieval never
+embedding-only). The freshness caveat is documented honestly rather than oversold.

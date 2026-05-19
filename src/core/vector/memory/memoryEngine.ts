@@ -20,6 +20,8 @@ export interface IndexInputs {
   sessions: SessionState[];
   checkpoint: Checkpoint | undefined;
   projectRoot: string;
+  /** sessionId → coordination namespace (v0.7.0); defaults to shared workspace. */
+  namespaceOf?: (sessionId: string) => string;
 }
 
 export interface IndexResult {
@@ -65,7 +67,11 @@ export class MemoryEngine {
   async buildChunks(inputs: IndexInputs): Promise<MemoryChunk[]> {
     return [
       ...chunkRepoIntelligence(inputs.intel),
-      ...chunkSessionMemory(inputs.sessions, inputs.checkpoint),
+      ...chunkSessionMemory(
+        inputs.sessions,
+        inputs.checkpoint,
+        inputs.namespaceOf ?? (() => 'workspace'),
+      ),
       ...(await chunkDocs(inputs.projectRoot)),
     ];
   }

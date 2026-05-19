@@ -101,8 +101,9 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.4.0     | GitHub engine (advisory): memory-informed commits, changelog, release plan                                  |
 | 0.5.0     | Flow/graph engine (Mermaid): module dependency + service/architecture/pipeline                              |
 | 0.5.2     | Reusable salience subsystem; salience-aware graph truncation                                                |
-| **0.6.0** | Vector / semantic memory: architecture-aware hybrid recall — _this release_                                 |
-| 0.7.0     | Multi-agent / distributed memory coordination                                                               |
+| 0.6.0     | Vector / semantic memory: architecture-aware hybrid recall                                                  |
+| 0.6.1     | Embedding provider layer (deterministic default; pluggable semantic)                                        |
+| **0.7.0** | Coordinated cognition & distributed engineering memory — _this release_                                     |
 | 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                         |
 | 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
 | 1.0.0     | Stable production release                                                                                   |
@@ -274,3 +275,30 @@ function and the "never embedding-only" invariant is structurally enforced
 term). Remote-provider failure falls back to deterministic and stamps the index with
 the provider actually used, so an embedding outage never breaks a session and a
 remote-labelled index never holds fallback vectors.
+
+## 14. Coordinated cognition (v0.7.0, ADR-0007)
+
+`src/core/coordination/` lets multiple workers share coherent continuity over the
+**same** event log — coordination infrastructure, not autonomous agents. The hype
+reading (network service, consensus) is rejected: it would break offline-safe.
+
+`CoordinationManager` is a pure projection of the shared log (same discipline as the
+session reducer), so all coordination state is deterministic and crash-safe:
+
+- **Cooperative leases** over `task`/`path`/`module` scopes with TTL. Conflict
+  resolution is by log order — the earliest overlapping lease wins, a later one is
+  `superseded`. Denials are advisory (ADR-0002) and audited; Kairo never preempts a
+  process. Ordering uses a **stable ts-only sort** so equal-timestamp events keep
+  append/causal order — re-projection is byte-identical (a bug caught in testing:
+  a `(ts,id)` sort had reordered `release` before `acquire`).
+- **Memory namespaces**: shared knowledge stays in `workspace`; a worker's
+  session/decision memory is filtered out of other workers' retrieval **before**
+  ranking — a deterministic visibility step, never an embedding effect, so the
+  "never embedding-only" and determinism invariants hold.
+- **Distributed checkpoint graph**: checkpoints carry owner + parent, forming a DAG
+  across workers/sessions rendered as the engineering timeline.
+
+Honest limitation: this is cooperative file-based coordination (O_APPEND atomicity +
+deterministic projection), **not** partition-tolerant consensus. Suitable for
+same-host / shared-volume teams; documented, not oversold. Future shared-team
+cognition is more projections over the same ledger — no redesign.

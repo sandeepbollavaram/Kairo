@@ -15,6 +15,9 @@ export interface CheckpointInput {
   completed?: string[];
   remaining?: string[];
   blockers?: string[];
+  /** Coordination (v0.7.0): owning worker + prior checkpoint for the DAG. */
+  ownerWorkerId?: string;
+  parentCheckpointId?: string;
 }
 
 export interface CheckpointOutput {
@@ -63,6 +66,8 @@ export class CheckpointManager {
       pressure,
       risk: assessSession(state),
       continuationRef: continuationName,
+      ...(input.ownerWorkerId ? { ownerWorkerId: input.ownerWorkerId } : {}),
+      ...(input.parentCheckpointId ? { parentCheckpointId: input.parentCheckpointId } : {}),
     };
 
     const continuationMarkdown = buildContinuationMarkdown(checkpoint);

@@ -27,6 +27,12 @@ export interface MemoryChunk {
   neighbors: string[];
   /** ISO timestamp for session/decision recency; omitted for static structure. */
   ts?: string;
+  /**
+   * Coordination namespace (v0.7.0). `workspace` (or omitted) = shared knowledge
+   * visible to all workers; a worker id = private session memory, isolated unless
+   * the searching worker matches. Deterministic filter, not a ranking change.
+   */
+  namespace?: string;
 }
 
 export interface EmbeddedChunk extends MemoryChunk {

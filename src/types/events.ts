@@ -23,7 +23,11 @@ export type EventType =
   | 'blocker.recorded'
   | 'heartbeat'
   | 'checkpoint.created'
-  | 'session.ended';
+  | 'session.ended'
+  | 'worker.registered'
+  | 'lease.acquired'
+  | 'lease.renewed'
+  | 'lease.released';
 
 export interface KairoEvent<TPayload = unknown> {
   readonly schema: typeof EVENT_SCHEMA_VERSION;

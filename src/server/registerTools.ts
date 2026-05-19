@@ -113,14 +113,24 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         agent: z.string().min(1).describe('Agent identifier, e.g. "claude-code".'),
         task: z.string().min(1).describe('What this session is trying to accomplish.'),
         projectRoot: z.string().optional().describe('Informational project root path.'),
+        worker: z
+          .string()
+          .optional()
+          .describe('Coordination worker id for multi-agent work (default: agent).'),
+        namespace: z
+          .string()
+          .optional()
+          .describe('Memory namespace; default isolates this worker. Use "workspace" to share.'),
       },
     },
-    async ({ agent, task, projectRoot }) => {
+    async ({ agent, task, projectRoot, worker, namespace }) => {
       try {
         const r = await sessions.startSession({
           agent,
           task,
           projectRoot: projectRootFrom(projectRoot),
+          ...(worker !== undefined ? { worker } : {}),
+          ...(namespace !== undefined ? { namespace } : {}),
         });
         const summary = r.resumed
           ? `Resumed. A prior continuation brief was found and is included below — resume from it; do not rescan the repo.`
@@ -639,6 +649,99 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         return digest
           ? ok(digest, { found: true })
           : ok('No memory indexed yet. Call kairo_memory_index.', { found: false });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  // ── Coordinated cognition (v0.7.0) ───────────────────────────────────────
+
+  server.registerTool(
+    'kairo_lease',
+    {
+      title: 'Coordinate work via a cooperative lease',
+      description:
+        'Advertise intent over a task/path/module so other workers do not collide. ' +
+        'acquire returns granted|denied with an explanation and the conflicting holder. ' +
+        'Advisory (ADR-0007): Kairo coordinates, it never preempts another process.',
+      inputSchema: {
+        action: z.enum(['acquire', 'renew', 'release']),
+        scopeKind: z.enum(['task', 'path', 'module']).optional(),
+        scope: z.string().optional().describe('Task text or path/module prefix.'),
+        leaseId: z.string().optional().describe('Required for renew/release.'),
+        ttlSeconds: z.number().int().min(1).max(86_400).optional(),
+      },
+    },
+    async ({ action, scopeKind, scope, leaseId, ttlSeconds }) => {
+      try {
+        let d;
+        if (action === 'acquire') {
+          if (!scopeKind || !scope) {
+            return fail(new KairoError('acquire requires scopeKind and scope.'));
+          }
+          d = await sessions.acquireLease({
+            scopeKind,
+            scope,
+            ...(ttlSeconds !== undefined ? { ttlSeconds } : {}),
+          });
+        } else if (action === 'renew') {
+          if (!leaseId) return fail(new KairoError('renew requires leaseId.'));
+          d = await sessions.renewLease(leaseId, ttlSeconds ?? 1800);
+        } else {
+          if (!leaseId) return fail(new KairoError('release requires leaseId.'));
+          d = await sessions.releaseLease(leaseId);
+        }
+        return ok(`${d.granted ? 'GRANTED' : 'DENIED'}: ${d.reason}`, {
+          granted: d.granted,
+          lease: d.lease ?? null,
+          conflict: d.conflict ?? null,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_coordination_status',
+    {
+      title: 'Coordination status',
+      description:
+        'Active workers, held leases, and ownership across the shared engineering ' +
+        'ledger — explainable conflict prevention for multi-agent work.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const s = await sessions.coordinationStatus();
+        const lines = [
+          `Workers (${s.workers.length}): ${s.workers.map((w) => `${w.workerId}[${w.namespace}]`).join(', ') || 'none'}`,
+          `Active leases (${s.activeLeases.length}):`,
+          ...s.activeLeases.map(
+            (l) => `  - ${l.scopeKind}:"${l.scope}" → ${l.workerId} (until ${l.expiresAt})`,
+          ),
+        ];
+        return ok(lines.join('\n'), s);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_timeline',
+    {
+      title: 'Engineering timeline (distributed checkpoint graph)',
+      description:
+        'Mermaid DAG of checkpoints across all workers/sessions — coherent engineering ' +
+        'continuity, deterministic from the shared log.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const t = await sessions.timeline();
+        return ok(t.markdown, { checkpoints: t.checkpoints });
       } catch (e) {
         return fail(e);
       }

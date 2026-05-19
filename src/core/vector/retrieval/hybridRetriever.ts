@@ -36,6 +36,20 @@ export interface RankContext {
   checkpoint?: Checkpoint | undefined;
   /** Reference "now" epoch for recency; defaults to max chunk ts. */
   nowMs?: number;
+  /**
+   * Coordination namespace of the searching worker (v0.7.0). When set, private
+   * session memory of OTHER workers is filtered out deterministically; shared
+   * (`workspace`/unset) memory is always visible. Not a ranking change.
+   */
+  namespace?: string;
+}
+
+const SHARED_NS = 'workspace';
+
+function visibleInNamespace(chunkNs: string | undefined, queryNs: string | undefined): boolean {
+  if (!queryNs) return true; // no isolation requested
+  if (!chunkNs || chunkNs === SHARED_NS) return true; // shared knowledge
+  return chunkNs === queryNs; // own private memory only
 }
 
 function clamp01(n: number): number {
@@ -87,11 +101,14 @@ export function retrieve(
   weights: RankWeights = DEFAULT_RANK_WEIGHTS,
 ): RetrievalResult[] {
   if (chunks.length === 0) return [];
+  // Deterministic namespace isolation BEFORE scoring (ADR-0007).
+  const pool = chunks.filter((c) => visibleInNamespace(c.namespace, ctx.namespace));
+  if (pool.length === 0) return [];
   const qTerms = queryTerms(query.text);
 
-  const maxSal = Math.max(1e-9, ...chunks.map((c) => c.salience));
-  const maxDeg = Math.max(1e-9, ...chunks.map((c) => c.graphDegree));
-  const tsList = chunks.map((c) => (c.ts ? Date.parse(c.ts) : NaN)).filter((n) => !Number.isNaN(n));
+  const maxSal = Math.max(1e-9, ...pool.map((c) => c.salience));
+  const maxDeg = Math.max(1e-9, ...pool.map((c) => c.graphDegree));
+  const tsList = pool.map((c) => (c.ts ? Date.parse(c.ts) : NaN)).filter((n) => !Number.isNaN(n));
   const newest = ctx.nowMs ?? (tsList.length ? Math.max(...tsList) : 0);
   const oldest = tsList.length ? Math.min(...tsList) : 0;
   const span = Math.max(1, newest - oldest);
@@ -104,7 +121,7 @@ export function retrieve(
       )
     : new Set<string>();
 
-  const results = chunks.map((c): RetrievalResult => {
+  const results = pool.map((c): RetrievalResult => {
     const similarity = clamp01(Math.max(0, cosine(queryVector, c.vector)));
     const salience = clamp01(c.salience / maxSal);
     const graphCentrality = clamp01(c.graphDegree / maxDeg);

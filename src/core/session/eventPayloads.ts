@@ -25,4 +25,16 @@ export interface EventPayloads {
   heartbeat: { reread?: string; note?: string; turns?: number };
   'checkpoint.created': { checkpointId: string; reason: string };
   'session.ended': Record<string, never>;
+  // ── Coordination (v0.7.0, ADR-0007) ──────────────────────────────────────
+  'worker.registered': { workerId: string; namespace: string; agent: string };
+  'lease.acquired': {
+    leaseId: string;
+    workerId: string;
+    scopeKind: 'task' | 'path' | 'module';
+    scope: string;
+    ttlMs: number;
+    acquiredAt: string;
+  };
+  'lease.renewed': { leaseId: string; workerId: string; renewedAt: string; ttlMs: number };
+  'lease.released': { leaseId: string; workerId: string; releasedAt: string };
 }
