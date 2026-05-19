@@ -414,4 +414,98 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
       }
     },
   );
+
+  // ── GitHub engine (advisory only — Kairo never mutates the repo; ADR-0003) ──
+
+  server.registerTool(
+    'kairo_git_status',
+    {
+      title: 'Read-only git context',
+      description:
+        'Branch, ahead/behind, staged/unstaged/untracked counts, last tag, recent ' +
+        'commit subjects. Read-only — Kairo never stages, commits, tags, or pushes.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const g = await sessions.gitContext();
+        if (!g.isRepo) return ok('Not a git repository.', { isRepo: false });
+        return ok(
+          `Branch ${g.branch ?? '(detached)'} — ${g.staged} staged, ${g.unstaged} unstaged, ` +
+            `${g.untracked} untracked. Last tag: ${g.lastTag ?? 'none'}.`,
+          g,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_commit_message',
+    {
+      title: 'Propose a semantic commit message',
+      description:
+        'Generate a Conventional-Commits message from the session ledger (decisions, ' +
+        'changed files, risk). Returns text only — it does NOT create a commit.',
+      inputSchema: {
+        summary: z.string().optional().describe('Optional extra summary to lead the body.'),
+      },
+    },
+    ({ summary }) => {
+      try {
+        const c = sessions.proposeCommitMessage(summary);
+        return ok(`${c.message}\n\n--- reasoning ---\n${c.reasoning.join('\n')}`, {
+          type: c.type,
+          scope: c.scope ?? null,
+          header: c.header,
+          message: c.message,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_changelog',
+    {
+      title: 'Propose a changelog fragment',
+      description:
+        'Generate a Keep-a-Changelog fragment from the session. Text only — it does ' +
+        'NOT edit CHANGELOG.md.',
+      inputSchema: {},
+    },
+    () => {
+      try {
+        const f = sessions.proposeChangelog();
+        return ok(f.markdown, { markdown: f.markdown });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_release_plan',
+    {
+      title: 'Propose a release plan',
+      description:
+        'Suggest the next semver bump, tag, and release notes from the session and the ' +
+        "project's package.json version. Plan only — no version bump, tag, or push.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const p = await sessions.proposeReleasePlan();
+        return ok(
+          `${p.currentVersion} → ${p.nextVersion} (${p.bump}), tag ${p.tag}\n\n` +
+            `${p.notes}\n\n--- reasoning ---\n${p.reasoning.join('\n')}`,
+          p,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
 }

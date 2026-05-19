@@ -71,6 +71,10 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_repo_scan',
         'kairo_repo_intel',
         'kairo_assess',
+        'kairo_git_status',
+        'kairo_commit_message',
+        'kairo_changelog',
+        'kairo_release_plan',
       ]),
     );
   });
@@ -105,6 +109,15 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     });
     const assessText = textOf(assess);
     expect(assessText).toMatch(/KAIRO GUARD: (ALLOW|CAUTION|HOLD)/);
+
+    const commit = await client.callTool({
+      name: 'kairo_commit_message',
+      arguments: {},
+    });
+    expect(textOf(commit)).toMatch(/^(feat|fix|docs|refactor|test|build|ci|chore)/m);
+
+    const release = await client.callTool({ name: 'kairo_release_plan', arguments: {} });
+    expect(textOf(release)).toMatch(/→ \d+\.\d+\.\d+ \((major|minor|patch)\), tag v/);
 
     const cp = await client.callTool({
       name: 'kairo_checkpoint',

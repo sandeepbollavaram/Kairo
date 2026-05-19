@@ -97,8 +97,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | --------- | ----------------------------------------------------------------------------------------------------------- |
 | 0.1.0     | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model               |
 | 0.2.0     | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning |
-| **0.3.0** | Risk engine + richer cooperative pressure signals; conservatism scales with pressure — _this release_       |
-| 0.4.0     | GitHub engine: semantic commits, changelog, release/tag orchestration                                       |
+| 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                        |
+| **0.4.0** | GitHub engine (advisory): memory-informed commits, changelog, release plan — _this release_                 |
 | 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                    |
 | 0.6.0     | Vector memory + semantic architecture search                                                                |
 | 0.7.0     | Multi-agent / distributed memory coordination                                                               |
@@ -162,3 +162,21 @@ Kairo emits and is wired to make checkpointing the path of least resistance.
 The two new cooperative signals — `compaction` (the agent reports its context was
 summarized) and `clarification` (it had to re-ask the user) — are the strongest
 loss proxies the agent can self-report and are weighted accordingly.
+
+## 10. GitHub engine (v0.4.0)
+
+`src/core/github/` turns the session ledger into git-facing artifacts: a
+Conventional-Commits message, a Keep-a-Changelog fragment, and a release plan, plus
+read-only git introspection.
+
+The defining constraint is **advisory-only** ([ADR-0003](adr/0003-advisory-github-engine.md)):
+Kairo runs only non-mutating git commands and never `add`/`commit`/`tag`/`push`. A
+commit is outward-facing and hard to reverse; an autonomous mutation driven by
+heuristic session state is precisely the failure mode Kairo exists to prevent in
+agents, so it must not commit it itself. Its only writes stay inside `.kairo/`.
+
+The generators are pure functions of `SessionState`, which makes them deterministic
+and unit-testable, and means the commit/changelog/release text reflects the
+**decisions and risk Kairo recorded** — information a diff-only tool cannot see. The
+release planner encodes the pre-1.0 semver convention (a breaking change bumps MINOR,
+not MAJOR, until 1.0.0) explicitly in its reasoning output rather than silently.

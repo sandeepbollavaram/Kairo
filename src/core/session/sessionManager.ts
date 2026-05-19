@@ -17,8 +17,20 @@ import { CheckpointManager, type CheckpointInput } from '../checkpoint/checkpoin
 import { inferRisk } from '../risk/riskHeuristics.js';
 import { assessChange, assessSession } from '../risk/riskEngine.js';
 import { evaluateGuardrail } from '../risk/guardrail.js';
+import { readGitContext } from '../github/gitContext.js';
+import { proposeCommit } from '../github/commitMessage.js';
+import { proposeChangelog } from '../github/changelog.js';
+import { proposeReleasePlan } from '../github/releasePlan.js';
+import type {
+  CommitProposal,
+  ChangelogFragment,
+  GitContext,
+  ReleasePlan,
+} from '../github/types.js';
 import { RepoScanner } from '../repo/repoScanner.js';
 import type { RepoIntelligence } from '../repo/types.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
 import { newId } from '../../utils/ids.js';
 import { KairoError } from '../../utils/errors.js';
@@ -267,6 +279,37 @@ export class SessionManager {
           )
         : assessSession(this.requireSession());
     return evaluateGuardrail(risk, this.pressure());
+  }
+
+  // ── GitHub engine (v0.4.0, advisory only — see ADR-0003) ─────────────────
+
+  /** Read-only git introspection of the active session's project root. */
+  gitContext(): Promise<GitContext> {
+    return readGitContext(this.requireSession().projectRoot);
+  }
+
+  /** Conventional-commit message proposed from the session ledger. No commit. */
+  proposeCommitMessage(extraSummary?: string): CommitProposal {
+    return proposeCommit(this.requireSession(), extraSummary);
+  }
+
+  /** Keep-a-Changelog fragment proposed from the session. No file edit. */
+  proposeChangelog(): ChangelogFragment {
+    return proposeChangelog(this.requireSession());
+  }
+
+  /** Release plan (semver bump, tag, notes). No version bump / tag / push. */
+  async proposeReleasePlan(): Promise<ReleasePlan> {
+    const state = this.requireSession();
+    let version = '0.0.0';
+    try {
+      const raw = await readFile(join(state.projectRoot, 'package.json'), 'utf8');
+      const v = (JSON.parse(raw) as { version?: unknown }).version;
+      if (typeof v === 'string') version = v;
+    } catch {
+      /* no package.json / unparseable: fall back to 0.0.0 */
+    }
+    return proposeReleasePlan(state, version);
   }
 
   /** Latest persisted checkpoint across all sessions (for the MCP resource). */

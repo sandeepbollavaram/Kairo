@@ -6,12 +6,26 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-19
+
 ### Added
 
+- **GitHub engine (advisory only — see [ADR-0003](docs/adr/0003-advisory-github-engine.md)).**
+  Kairo proposes, it never mutates the repo: no `git add/commit/tag/push`.
+  - `kairo_git_status`: read-only branch / ahead-behind / staged-unstaged-untracked
+    / last-tag / recent-commit introspection that degrades safely outside a repo.
+  - `kairo_commit_message`: a Conventional-Commits message generated **from the
+    session ledger** (decisions, changed files, risk) — not from a diff. Emits no
+    AI co-author trailer.
+  - `kairo_changelog`: a Keep-a-Changelog fragment bucketed Added/Changed/Fixed/
+    Removed from the session.
+  - `kairo_release_plan`: suggested semver bump + tag + release notes from the
+    session and the project's `package.json`, with the documented pre-1.0
+    breaking-change convention (breaking ⇒ MINOR until 1.0.0).
 - End-to-end MCP integration smoke test: spawns the built server over real stdio,
   performs the SDK handshake, exercises the full tool/prompt/resource surface and a
-  complete session lifecycle, and asserts on-disk `.kairo/` artifacts plus
-  cross-process anti-rescan resume. Self-contained (builds in `beforeAll`).
+  complete session lifecycle (now including the GitHub tools), and asserts on-disk
+  `.kairo/` artifacts plus cross-process anti-rescan resume. Self-contained.
 
 ## [0.3.0] - 2026-05-19
 
@@ -80,7 +94,8 @@ All notable changes to Kairo are documented here. The format is based on
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sandy001-kki/Kairo/releases/tag/v0.1.0

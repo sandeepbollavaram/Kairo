@@ -16,6 +16,14 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.4.0 — GitHub engine (advisory).** Kairo turns its session memory into a
+Conventional-Commits message, a Keep-a-Changelog fragment, and a release plan
+(semver bump + tag + notes), and reads git state read-only. By deliberate design
+([ADR-0003](docs/adr/0003-advisory-github-engine.md)) it **never** runs
+`git add/commit/tag/push` — Kairo proposes, you dispose. The unique value is
+memory-informed proposals (they reflect the decisions and risk Kairo recorded), not
+automation.
+
 **v0.3.0 — Risk Engine + conservatism that scales with pressure.** Kairo now
 classifies the _engineering_ risk of changes (sensitive paths, deletions,
 secret-adjacency, unresolved-error breadth) and combines it with context-loss
@@ -100,7 +108,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.3.0)
+## MCP surface (v0.4.0)
 
 | Tool                   | Purpose                                                              |
 | ---------------------- | -------------------------------------------------------------------- |
@@ -114,6 +122,10 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_repo_scan`      | Cached repo intelligence; `force` to rescan                          |
 | `kairo_repo_intel`     | Cached repo intelligence summary (no scan)                           |
 | `kairo_assess`         | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD) |
+| `kairo_git_status`     | Read-only git context (branch, ahead/behind, tag, recent commits)    |
+| `kairo_commit_message` | Conventional-Commits message from session memory (no commit)         |
+| `kairo_changelog`      | Keep-a-Changelog fragment from the session (no file edit)            |
+| `kairo_release_plan`   | Semver bump + tag + release notes proposal (no tag/push)             |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

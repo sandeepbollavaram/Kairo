@@ -31,6 +31,10 @@ export const CONTINUITY_PROMPT_TEXT = `You are working through Kairo, a persiste
    the current step then checkpoint. On \`CHECKPOINT_NOW\` call \`kairo_checkpoint\`
    immediately, before any further risky change.
 
-6. END: Call \`kairo_session_end\` so the next agent gets a clean, exact handoff.
+6. SHIP: When ready to commit, call \`kairo_commit_message\` (and
+   \`kairo_changelog\` / \`kairo_release_plan\` at release time). Kairo proposes the
+   text from its memory; YOU run git — Kairo never commits, tags, or pushes.
+
+7. END: Call \`kairo_session_end\` so the next agent gets a clean, exact handoff.
 
 Treat Kairo as a senior engineer supervising you: it remembers so you don't have to.`;
