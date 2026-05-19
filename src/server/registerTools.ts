@@ -543,4 +543,105 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
       }
     },
   );
+
+  // ── Semantic memory (v0.6.0) ─────────────────────────────────────────────
+
+  server.registerTool(
+    'kairo_memory_search',
+    {
+      title: 'Semantic architecture recall',
+      description:
+        'Hybrid, explainable recall over Kairo memory (structural/semantic/session/' +
+        'decision/operational). Ranks by similarity + salience + graph centrality + ' +
+        'runtime layer + recency + checkpoint overlap — a central module beats a ' +
+        'lexically similar example. Use this INSTEAD of rescanning the repo.',
+      inputSchema: {
+        query: z.string().describe('What architectural context you need.'),
+        limit: z.number().int().min(1).max(25).optional(),
+        kind: z.enum(['structural', 'semantic', 'session', 'decision', 'operational']).optional(),
+      },
+    },
+    async ({ query, limit, kind }) => {
+      try {
+        const results = await sessions.searchMemory({
+          text: query,
+          ...(limit !== undefined ? { limit } : {}),
+          ...(kind !== undefined ? { kind } : {}),
+        });
+        if (results.length === 0) {
+          return ok('Memory empty/unindexed. Call kairo_memory_index (or start a session).', {
+            found: false,
+          });
+        }
+        const body = results
+          .map(
+            (r, i) =>
+              `${i + 1}. [${r.chunk.kind}] ${r.chunk.locator} (score ${r.score.toFixed(3)})\n` +
+              `   why: ${r.why}\n   ${r.chunk.text.slice(0, 240)}`,
+          )
+          .join('\n');
+        return ok(body, {
+          found: true,
+          results: results.map((r) => ({
+            id: r.chunk.id,
+            kind: r.chunk.kind,
+            locator: r.chunk.locator,
+            score: r.score,
+            similarity: r.similarity,
+            factors: r.factors,
+          })),
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_memory_index',
+    {
+      title: 'Build / refresh semantic memory',
+      description:
+        'Build the architecture memory index. Fingerprint-keyed: a cache hit does NOT ' +
+        're-embed. Pass force:true to rebuild.',
+      inputSchema: { force: z.boolean().optional() },
+    },
+    async ({ force }) => {
+      try {
+        const r = await sessions.indexMemory(undefined, force ?? false);
+        if (!r) {
+          return ok('No repo intelligence yet. Start a session or run kairo_repo_scan.', {
+            indexed: false,
+          });
+        }
+        return ok(
+          `${r.reused ? 'Reused cached index' : 'Rebuilt index'} — ${r.chunks} memory chunks.`,
+          { indexed: true, ...r },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_memory_digest',
+    {
+      title: 'Compressed architectural memory',
+      description:
+        'Deterministic salience-ordered architecture digest — read this instead of ' +
+        'rescanning the repository. Heuristic extract (stated honestly), not an LLM summary.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const digest = await sessions.compressMemory();
+        return digest
+          ? ok(digest, { found: true })
+          : ok('No memory indexed yet. Call kairo_memory_index.', { found: false });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
 }

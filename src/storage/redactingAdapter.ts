@@ -2,6 +2,7 @@ import type { StorageAdapter } from './storageAdapter.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
+import type { VectorIndex } from '../core/vector/types.js';
 import { sanitize } from '../security/redactor.js';
 import type { Clock } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
@@ -80,6 +81,15 @@ export function withRedaction(inner: StorageAdapter, clock: Clock): StorageAdapt
       await inner.saveGraph(kind, value);
       await auditFindings('graph', findings);
     },
+
+    async saveVectorIndex(index: VectorIndex): Promise<void> {
+      // Sanitise chunk text before it is embedded into the persisted index.
+      const { value, findings } = sanitize(index);
+      await inner.saveVectorIndex(value);
+      await auditFindings('vector-index', findings);
+    },
+
+    loadVectorIndex: () => inner.loadVectorIndex(),
 
     // Audit entries are constructed internally and never carry secret values.
     audit: (entry: AuditEntry) => inner.audit(entry),

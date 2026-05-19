@@ -16,6 +16,17 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.6.0 — Vector / semantic memory.** Architecture-aware hybrid recall, **not**
+naive RAG. Kairo builds memory chunks (structural / semantic / session / decision /
+operational) from artifacts it already derives, embeds them with a **deterministic
+local** embedder (pluggable; honestly lexical/structural, not deep-semantic), and
+ranks retrieval by a hybrid of similarity **+ salience + graph centrality + runtime
+layer + recency + checkpoint overlap** — so a central module beats a lexically
+similar example. The index is fingerprint-keyed (no re-embed on a cache hit) and
+every continuation brief auto-carries a "Semantic architecture recall" section so the
+next agent resumes without rescanning. Tools: `kairo_memory_search` /
+`kairo_memory_index` / `kairo_memory_digest`.
+
 **v0.5.0 — Flow / graph engine.** Add Kairo to a repo and you immediately get
 Mermaid graphs from its intelligence: a **module dependency graph** (real import
 edges, collapsed to readable directory granularity and node-capped), plus derived
@@ -115,7 +126,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.5.0)
+## MCP surface (v0.6.0)
 
 | Tool                   | Purpose                                                              |
 | ---------------------- | -------------------------------------------------------------------- |
@@ -134,6 +145,9 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_changelog`      | Keep-a-Changelog fragment from the session (no file edit)            |
 | `kairo_release_plan`   | Semver bump + tag + release notes proposal (no tag/push)             |
 | `kairo_graph`          | Mermaid module/service/architecture/pipeline graph (no rescan)       |
+| `kairo_memory_search`  | Hybrid explainable semantic recall (use instead of rescanning)       |
+| `kairo_memory_index`   | Build/refresh memory; fingerprint-keyed, no re-embed on hit          |
+| `kairo_memory_digest`  | Compressed salience-ordered architecture memory                      |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

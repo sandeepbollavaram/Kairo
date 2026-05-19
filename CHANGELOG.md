@@ -6,6 +6,36 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-19
+
+Vector / semantic memory — architecture-aware hybrid recall, **not** naive RAG. See
+[VECTOR_MEMORY.md](docs/VECTOR_MEMORY.md) and
+[ADR-0005](docs/adr/0005-vector-memory-design.md).
+
+### Added
+
+- **`src/core/vector/` semantic cognition layer.** Architecture-aware chunks across
+  five memory classes (structural / semantic / session / decision / operational)
+  built from artifacts Kairo already derives deterministically — not a blind file
+  dump.
+- **Pluggable `Embedder`; deterministic local default.** `DeterministicEmbedder` is
+  a pure, fixed-256-dim hashed lexical/structural vector (no network, no secrets,
+  byte-stable). Documented honestly as lexical, *not* deep-semantic; hosted/semantic
+  providers register behind the same interface.
+- **Hybrid, explainable retrieval.** `score = Σ factor·weight` over similarity +
+  salience + graph centrality + session recency + runtime layer + dependency
+  proximity + checkpoint overlap; every result reports its factors. A central module
+  out-ranks a lexically similar peripheral example even with the weak embedder
+  (regression-tested).
+- **Fingerprint-keyed index** (repo fingerprint + embedder id): a cache hit does NOT
+  re-embed — the same anti-rescan discipline as cached intelligence. Persisted
+  through the redaction boundary.
+- **Continuity integration:** `kairo_session_start` indexes automatically; every
+  continuation brief auto-carries a "Semantic architecture recall" section so the
+  next agent resumes with context instead of rescanning. Deterministic compressed
+  architecture digest via `kairo_memory_digest`.
+- New MCP tools: `kairo_memory_search`, `kairo_memory_index`, `kairo_memory_digest`.
+
 ## [0.5.2] - 2026-05-19
 
 Salience-aware graph ranking, prerequisite for v0.6.0 vector memory (embedding weak
@@ -168,7 +198,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...v0.5.0

@@ -99,8 +99,9 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.2.0     | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning |
 | 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                        |
 | 0.4.0     | GitHub engine (advisory): memory-informed commits, changelog, release plan                                  |
-| **0.5.0** | Flow/graph engine (Mermaid): module dependency + service/architecture/pipeline — _this release_             |
-| 0.6.0     | Vector memory + semantic architecture search                                                                |
+| 0.5.0     | Flow/graph engine (Mermaid): module dependency + service/architecture/pipeline                              |
+| 0.5.2     | Reusable salience subsystem; salience-aware graph truncation                                                |
+| **0.6.0** | Vector / semantic memory: architecture-aware hybrid recall — _this release_                                 |
 | 0.7.0     | Multi-agent / distributed memory coordination                                                               |
 | 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                         |
 | 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
@@ -231,3 +232,32 @@ salience instead of degree. A subtlety found while testing: src-aware grouping s
 blind to the noise they target. Future consumers (vector memory, semantic search,
 checkpoint compression, continuation prioritisation) reuse the same subsystem rather
 than re-deriving importance.
+
+## 13. Vector / semantic memory (v0.6.0)
+
+`src/core/vector/` is the semantic cognition layer — architecture-aware hybrid
+recall, **not** naive RAG (ADR-0005, [VECTOR_MEMORY.md](VECTOR_MEMORY.md)). Chunks
+are architecture-aware objects across five memory classes (structural / semantic /
+session / decision / operational) built from artifacts Kairo already derives
+deterministically — never a blind file dump.
+
+Three decisions keep it aligned with Kairo's principles:
+
+1. **Deterministic local embedder by default.** `Embedder` is an interface; the
+   default is a pure hashed lexical/structural vector (no network, no secrets,
+   byte-stable so memory does not churn). It is documented as lexical, _not_ deep
+   semantic — honesty over flash. Hosted/semantic providers are pluggable.
+2. **Hybrid explainable ranking, not cosine-only.** Similarity is one of seven
+   weighted factors (salience, graph centrality, runtime layer, dependency
+   proximity, recency, checkpoint overlap). Salience and structure carry enough
+   weight that a central module beats a lexically similar peripheral example even
+   with the weak embedder — the property that makes recall architecture-aware.
+3. **Fingerprint-keyed, integrated into continuity.** The index reuses on a
+   fingerprint match (no re-embed). `kairo_session_start` indexes automatically and
+   every continuation brief auto-carries a "Semantic architecture recall" section,
+   so the next agent resumes with context rather than rescanning — the concrete
+   mechanism behind the v0.6.0 success condition.
+
+All persistence flows through the redaction boundary. Future (multi-agent/shared
+cognition, evolution timelines, distributed stores) are additional chunk kinds,
+embedder providers, and `VectorStore` adapters behind the same interfaces.

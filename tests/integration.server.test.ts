@@ -76,6 +76,9 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_changelog',
         'kairo_release_plan',
         'kairo_graph',
+        'kairo_memory_search',
+        'kairo_memory_index',
+        'kairo_memory_digest',
       ]),
     );
   });
@@ -126,11 +129,23 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     });
     expect(textOf(graph)).toContain('flowchart TD');
 
+    const mem = await client.callTool({
+      name: 'kairo_memory_search',
+      arguments: { query: 'payment charge module architecture' },
+    });
+    expect(textOf(mem)).toMatch(/why:|Memory empty/);
+
+    const digest = await client.callTool({ name: 'kairo_memory_digest', arguments: {} });
+    expect(textOf(digest)).toMatch(/Compressed Architectural Memory|No memory indexed/);
+
     const cp = await client.callTool({
       name: 'kairo_checkpoint',
       arguments: { reason: 'manual', completed: ['charge path'] },
     });
-    expect(textOf(cp)).toContain('Kairo Continuation Brief');
+    const cpText = textOf(cp);
+    expect(cpText).toContain('Kairo Continuation Brief');
+    // Continuity brief auto-carries semantic recall so the next agent need not rescan.
+    expect(cpText).toContain('Semantic architecture recall');
 
     const end = await client.callTool({ name: 'kairo_session_end', arguments: {} });
     expect(textOf(end)).toContain('Session ended');

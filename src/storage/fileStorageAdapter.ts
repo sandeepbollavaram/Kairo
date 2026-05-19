@@ -5,6 +5,7 @@ import { kairoPaths, type KairoPaths } from './paths.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
+import type { VectorIndex } from '../core/vector/types.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -32,6 +33,7 @@ export class FileStorageAdapter implements StorageAdapter {
       this.paths.reportsDir,
       this.paths.intelligenceDir,
       this.paths.graphsDir,
+      this.paths.vectorDir,
     ]) {
       await mkdir(dir, { recursive: true });
     }
@@ -120,6 +122,14 @@ export class FileStorageAdapter implements StorageAdapter {
 
   async saveGraph(kind: string, markdown: string): Promise<void> {
     await this.writeAtomic(this.paths.graphFile(kind), markdown);
+  }
+
+  async saveVectorIndex(index: VectorIndex): Promise<void> {
+    await this.writeAtomic(this.paths.vectorIndexFile, JSON.stringify(index));
+  }
+
+  async loadVectorIndex(): Promise<VectorIndex | undefined> {
+    return this.readJson<VectorIndex>(this.paths.vectorIndexFile);
   }
 
   async audit(entry: AuditEntry): Promise<void> {

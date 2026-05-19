@@ -15,6 +15,8 @@ export interface KairoPaths {
   reportsDir: string;
   intelligenceDir: string;
   graphsDir: string;
+  vectorDir: string;
+  vectorIndexFile: string;
   sessionFile: (id: string) => string;
   checkpointFile: (id: string) => string;
   continuationFile: (name: string) => string;
@@ -41,6 +43,8 @@ export function kairoPaths(explicitRoot?: string): KairoPaths {
     reportsDir: join(base, 'reports'),
     intelligenceDir: join(base, 'intelligence'),
     graphsDir: join(base, 'graphs'),
+    vectorDir: join(base, 'vector'),
+    vectorIndexFile: join(base, 'vector', 'index.json'),
     sessionFile: (id) => join(base, 'sessions', `${id}.json`),
     checkpointFile: (id) => join(base, 'checkpoints', `${id}.json`),
     continuationFile: (name) => join(base, 'continuations', name),

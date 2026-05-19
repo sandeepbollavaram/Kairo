@@ -196,3 +196,68 @@ graph is truncated.
 **Conclusion:** structural-signal quality is now strong, honest, deterministic, and
 explainable. v0.5.x is stable. Safe to start **v0.6.0 Vector Memory**, which should
 weight embeddings by this salience subsystem rather than re-deriving importance.
+
+---
+
+# Addendum — v0.6.0 Vector / Semantic Memory (dogfood)
+
+Re-dogfooded on Kairo, colinhacks/zod, nestjs/nest via the real engine paths
+(`RepoScanner` → `MemoryEngine.index/search/compress`, redaction-wrapped adapter).
+
+| Repo  | chunks | index | reuse (2nd)       | deterministic | top-5 first-party | top-1 kind |
+| ----- | -----: | ----: | ----------------- | ------------- | ----------------- | ---------- |
+| Kairo |     32 | 32 ms | reused=true, 1 ms | yes           | 5/5               | structural |
+| zod   |     30 | 13 ms | reused=true, 1 ms | yes           | 5/5               | structural |
+| nest  |     45 | 11 ms | reused=true, 1 ms | yes           | 5/5               | structural |
+
+## What worked (verified, not assumed)
+
+- **Reduced rescanning is real and measured.** The index is fingerprint-keyed: the
+  second `index()` returned `reused=true` in ~1 ms with **no re-embedding** on all
+  three repos. `kairo_session_start` does this automatically and continuation briefs
+  auto-carry a "Semantic architecture recall" section (asserted in the e2e test) —
+  the next agent resumes with architecture context instead of walking the tree.
+- **Ranking is architecture-correct.** Top-5 was 5/5 first-party on every repo;
+  central modules (`core/session`, `zod/v4`, nest `core`) and the structural
+  overview rank top; no `docs/`/`examples/`/`fixtures/` noise surfaced. Salience +
+  graph centrality + runtime layer dominate, exactly as designed.
+- **Deterministic.** Identical (id, score) ordering across repeated runs on all
+  three — required because this seeds long-term memory.
+- **Redaction boundary held end-to-end.** zod & nest tripped
+  `Redacted 1 secret(s) before persisting vector-index` (a generic `KEY=VALUE`
+  shape in doc text) — over-redaction in memory is the correct bias.
+- **Explainable.** Every result carries per-factor `why` (e.g.
+  `salience 1, graphCentrality 0.58, dependencyProximity 0.6`).
+
+## Found and fixed during this dogfood
+
+- **`struct:overview` locator was the absolute local path** (`C:\Users\…\nest`),
+  leaking the machine path into persisted memory. Fixed to the logical
+  `(repository)`; re-validated.
+
+## Honest limitations (documented, not oversold)
+
+- **The default embedder is weak as _semantic_ similarity.** Cosine to short
+  structural chunks was frequently ~0.00–0.16; retrieval is therefore driven mostly
+  by salience/graph/runtime, **not** by embedding similarity. This is precisely the
+  ADR-0005 trade-off: the default is lexical/structural and deterministic; hybrid
+  structure carries correctness; a hosted/semantic embedder (pluggable behind
+  `Embedder`) would raise the similarity factor. Stated plainly in
+  `VECTOR_MEMORY.md` and the tool output — Kairo does not claim deep semantic search
+  with the default provider.
+- **Graph-degree can over-rank integration/test-heavy areas.** On nest,
+  `integration` (highest raw degree) edged out `core` for the #1 module slot
+  (both first-party; salience kept `core` at #2). Heuristic, acceptable, noted —
+  not a correctness failure.
+- Structural chunk text is terse by design (bounded), which is part of why lexical
+  similarity is low; richer summaries are a future, embedder-dependent improvement.
+
+## Success-condition verdict
+
+The v0.6.0 success condition was "genuinely reduces future rescanning while
+improving architectural continuity — not just because embeddings exist." Met:
+the fingerprint-keyed index + auto-recall in continuation briefs concretely remove
+rescans, and ranking returns real architecture (5/5 first-party, central-module
+top-1) deterministically. The semantic-similarity weakness of the default embedder
+is real and disclosed; it does not block the success condition because Kairo's value
+is _which_ context to surface, and that is salience/structure-driven by design.

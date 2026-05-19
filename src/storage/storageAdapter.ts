@@ -1,6 +1,7 @@
 import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
+import type { VectorIndex } from '../core/vector/types.js';
 
 /**
  * Persistence seam. Engines depend only on this interface, never on the filesystem.
@@ -35,6 +36,10 @@ export interface StorageAdapter {
 
   /** Persist a rendered graph markdown mirror under `.kairo/graphs/<kind>.md`. */
   saveGraph(kind: string, markdown: string): Promise<void>;
+
+  /** Persist / load the semantic memory index (fingerprint-keyed). */
+  saveVectorIndex(index: VectorIndex): Promise<void>;
+  loadVectorIndex(): Promise<VectorIndex | undefined>;
 
   /** Append an audit record. Never contains secret values. */
   audit(entry: AuditEntry): Promise<void>;

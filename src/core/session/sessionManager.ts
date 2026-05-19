@@ -33,11 +33,14 @@ import { INTELLIGENCE_SCHEMA } from '../repo/types.js';
 import { buildGraph, buildAllGraphs, GRAPH_KINDS } from '../graph/graphEngine.js';
 import { renderGraphMarkdown } from '../graph/mermaid.js';
 import type { GraphKind, RepoGraph } from '../graph/types.js';
+import { MemoryEngine } from '../vector/memory/memoryEngine.js';
+import type { RetrievalQuery, RetrievalResult } from '../vector/types.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
 import { newId } from '../../utils/ids.js';
 import { KairoError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 
 export interface StartResult {
   sessionId: string;
@@ -79,8 +82,10 @@ export type RecordKind =
  */
 export class SessionManager {
   private current: SessionState | undefined;
+  private projectRoot = '';
   private readonly checkpoints: CheckpointManager;
   private readonly scanner: RepoScanner;
+  private readonly memory: MemoryEngine;
 
   constructor(
     private readonly adapter: StorageAdapter,
@@ -88,6 +93,7 @@ export class SessionManager {
   ) {
     this.checkpoints = new CheckpointManager(adapter, clock);
     this.scanner = new RepoScanner(clock);
+    this.memory = new MemoryEngine(adapter);
   }
 
   async init(): Promise<void> {
@@ -118,6 +124,7 @@ export class SessionManager {
 
     // Anti-rescan core: reuse cached repo intelligence if present; only scan when
     // none exists yet (or the cache predates the current schema). Keeps resume cheap.
+    this.projectRoot = args.projectRoot;
     let intelligence = await this.loadValidIntelligence();
     let intelligenceFromCache = true;
     if (!intelligence) {
@@ -126,6 +133,10 @@ export class SessionManager {
       await this.persistGraphs(intelligence);
       intelligenceFromCache = false;
     }
+    // Build/reuse semantic memory (fingerprint-keyed: no re-embed on a cache hit).
+    await this.indexMemory(intelligence).catch((e) =>
+      logger.warn(`Memory index skipped: ${e instanceof Error ? e.message : String(e)}`),
+    );
 
     return {
       sessionId,
@@ -232,9 +243,13 @@ export class SessionManager {
       checkpointId: out.checkpoint.id,
       reason: input.reason,
     });
+    const brief = out.continuationMarkdown + (await this.recallSection(state.task));
+    if (brief !== out.continuationMarkdown) {
+      await this.adapter.saveContinuation(out.checkpoint.continuationRef, brief);
+    }
     return {
       checkpoint: out.checkpoint,
-      brief: out.continuationMarkdown,
+      brief,
       pressure: this.pressure(),
     };
   }
@@ -247,7 +262,11 @@ export class SessionManager {
       reason: 'session-end',
     });
     await this.append(state.id, 'session.ended', {});
-    return { checkpoint: out.checkpoint, brief: out.continuationMarkdown };
+    const brief = out.continuationMarkdown + (await this.recallSection(state.task));
+    if (brief !== out.continuationMarkdown) {
+      await this.adapter.saveContinuation(out.checkpoint.continuationRef, brief);
+    }
+    return { checkpoint: out.checkpoint, brief };
   }
 
   status(): { state: SessionState; pressure: PressureSnapshot } {
@@ -379,6 +398,66 @@ export class SessionManager {
   async priorSessions(): Promise<SessionState[]> {
     const all = reduceAll(await this.adapter.readEvents());
     return [...all.values()];
+  }
+
+  // ── Semantic memory (v0.6.0) ─────────────────────────────────────────────
+
+  /** Build/reuse the fingerprint-keyed semantic index. No re-embed on cache hit. */
+  async indexMemory(
+    intel?: RepoIntelligence,
+    force = false,
+  ): Promise<{ chunks: number; reused: boolean } | undefined> {
+    const intelligence = intel ?? (await this.loadValidIntelligence());
+    if (!intelligence) return undefined;
+    const sessions = await this.priorSessions();
+    const checkpoint = await this.adapter.loadLatestCheckpoint();
+    const r = await this.memory.index(
+      {
+        intel: intelligence,
+        sessions,
+        checkpoint,
+        projectRoot: this.projectRoot || intelligence.projectRoot,
+      },
+      force,
+    );
+    return { chunks: r.chunks, reused: r.reused };
+  }
+
+  /** Hybrid, explainable semantic recall over architecture memory. */
+  async searchMemory(query: RetrievalQuery): Promise<RetrievalResult[]> {
+    const checkpoint = await this.adapter.loadLatestCheckpoint();
+    return this.memory.search(query, { checkpoint });
+  }
+
+  /** Deterministic compressed architectural memory (reduces rescanning). */
+  compressMemory(): Promise<string | undefined> {
+    return this.memory.compress();
+  }
+
+  memoryStats(): ReturnType<MemoryEngine['stats']> {
+    return this.memory.stats();
+  }
+
+  /** Markdown "semantic recall" appendix injected into continuation briefs. */
+  private async recallSection(task: string): Promise<string> {
+    try {
+      const results = await this.memory.search(
+        { text: task, limit: 6 },
+        { checkpoint: await this.adapter.loadLatestCheckpoint() },
+      );
+      if (results.length === 0) return '';
+      const lines = results.map(
+        (r) => `- **${r.chunk.locator}** (${r.chunk.kind}, score ${r.score.toFixed(3)}) — ${r.why}`,
+      );
+      return [
+        '',
+        '## Semantic architecture recall',
+        '_Auto-retrieved so you can resume without rescanning. Lexical+structural hybrid (ADR-0005)._',
+        ...lines,
+      ].join('\n');
+    } catch {
+      return '';
+    }
   }
 
   // ── internals ────────────────────────────────────────────────────────────
