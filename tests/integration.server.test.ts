@@ -80,6 +80,7 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_memory_index',
         'kairo_memory_refresh',
         'kairo_memory_digest',
+        'kairo_brief',
         'kairo_lease',
         'kairo_coordination_status',
         'kairo_timeline',
@@ -134,21 +135,35 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
 
     const graph = await client.callTool({
       name: 'kairo_graph',
-      arguments: { kind: 'architecture' },
+      arguments: { kind: 'architecture', includeFull: true },
     });
     expect(textOf(graph)).toContain('flowchart TD');
+    const graphCompact = await client.callTool({
+      name: 'kairo_graph',
+      arguments: { kind: 'architecture' },
+    });
+    // Default is compact: a summary line + mirror path, NOT inline Mermaid.
+    expect(textOf(graphCompact)).toMatch(/architecture graph: \d+ nodes/);
+    expect(textOf(graphCompact)).not.toContain('flowchart TD');
 
     const mem = await client.callTool({
       name: 'kairo_memory_search',
       arguments: { query: 'payment charge module architecture' },
     });
-    expect(textOf(mem)).toMatch(/why:|Memory empty/);
+    // Compact format (v0.8.2): "1. [kind] locator (score X.XXX) — why"
+    expect(textOf(mem)).toMatch(/\[\w+\]|Memory empty/);
 
     const digest = await client.callTool({ name: 'kairo_memory_digest', arguments: {} });
     expect(textOf(digest)).toMatch(/Compressed Architectural Memory|No memory indexed/);
 
     const refresh = await client.callTool({ name: 'kairo_memory_refresh', arguments: {} });
     expect(textOf(refresh)).toMatch(/Memory (refreshed|already fresh)|No repo intelligence/);
+
+    const briefTiny = await client.callTool({
+      name: 'kairo_brief',
+      arguments: { mode: 'tiny' },
+    });
+    expect(textOf(briefTiny)).toMatch(/No checkpoint yet/); // pre-checkpoint here
 
     const lease = await client.callTool({
       name: 'kairo_lease',

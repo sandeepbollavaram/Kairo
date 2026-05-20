@@ -29,6 +29,10 @@ what is left, and what is risky — and it hands the next agent an exact brief.
 5. **Seams over implementations.** `StorageAdapter`, tool registration, and the pressure
    model are interfaces so backends (SQLite, vector DB), transports (HTTP/SSE), and
    richer engines can be added without rewrites.
+6. **Token efficiency.** Use the fewest useful tokens while preserving engineering
+   continuity. Default to compact; require explicit opt-in for verbose. Reports go to
+   files; prompts get pointers. Briefs have modes (`tiny` / `normal` / `deep`). See
+   [ADR-0010](adr/0010-token-efficiency.md) and [TOKEN_EFFICIENCY.md](TOKEN_EFFICIENCY.md).
 
 ## 3. Layered architecture
 
@@ -105,7 +109,9 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.6.1     | Embedding provider layer (deterministic default; pluggable semantic)                                        |
 | 0.7.0     | Coordinated cognition & distributed engineering memory                                                      |
 | 0.7.1     | Cross-worker memory freshness (deterministic memory fingerprint)                                            |
-| **0.8.0** | Enterprise telemetry, analytics & team coordination — _this release_                                        |
+| 0.8.0     | Enterprise telemetry, analytics & team coordination                                                         |
+| 0.8.1     | Deterministic engineering introspection (read-only query layer)                                             |
+| **0.8.2** | Token efficiency as a core architecture principle — _this release_                                          |
 | 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
 | 1.0.0     | Stable production release                                                                                   |
 

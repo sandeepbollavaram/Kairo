@@ -527,22 +527,28 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
     {
       title: 'Render a repository graph as Mermaid',
       description:
-        'Return a Mermaid diagram derived from cached repo intelligence (no rescan): ' +
-        '"module" (collapsed internal import graph), "service", "architecture", or ' +
-        '"pipeline". Mirrors are also written to .kairo/graphs/.',
+        'Return a graph derived from cached repo intelligence (no rescan): ' +
+        '"module" / "service" / "architecture" / "pipeline". Mirrors are written to ' +
+        '.kairo/graphs/. Default response is COMPACT (summary + file path); pass ' +
+        'includeFull:true to inline the full Mermaid (ADR-0010 token efficiency).',
       inputSchema: {
         kind: z.enum(['module', 'service', 'architecture', 'pipeline']).optional(),
+        includeFull: z.boolean().optional().describe('Inline full Mermaid (default false).'),
       },
     },
-    async ({ kind }) => {
+    async ({ kind, includeFull }) => {
       try {
-        const result = await sessions.graph(kind ?? 'module');
+        const k = kind ?? 'module';
+        const result = await sessions.graph(k);
         if (!result) {
           return ok('No repo intelligence cached yet. Call kairo_repo_scan first.', {
             found: false,
           });
         }
-        return ok(result.markdown, {
+        const summary =
+          `${k} graph: ${result.graph.nodes.length} nodes / ${result.graph.edges.length} edges` +
+          `${result.graph.truncated ? ' (truncated)' : ''}. Mirror: .kairo/graphs/${k}.md`;
+        return ok(includeFull ? `${summary}\n\n${result.markdown}` : summary, {
           found: true,
           kind: result.graph.kind,
           nodes: result.graph.nodes.length,
@@ -574,9 +580,11 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
     },
     async ({ query, limit, kind }) => {
       try {
+        // Token-efficient default (ADR-0010): cap at 5 results unless caller asks for more.
+        const effectiveLimit = limit ?? 5;
         const results = await sessions.searchMemory({
           text: query,
-          ...(limit !== undefined ? { limit } : {}),
+          limit: effectiveLimit,
           ...(kind !== undefined ? { kind } : {}),
         });
         if (results.length === 0) {
@@ -587,8 +595,7 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         const body = results
           .map(
             (r, i) =>
-              `${i + 1}. [${r.chunk.kind}] ${r.chunk.locator} (score ${r.score.toFixed(3)})\n` +
-              `   why: ${r.why}\n   ${r.chunk.text.slice(0, 240)}`,
+              `${i + 1}. [${r.chunk.kind}] ${r.chunk.locator} (score ${r.score.toFixed(3)}) — ${r.why.slice(0, 120)}`,
           )
           .join('\n');
         return ok(body, {
@@ -679,6 +686,35 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         return digest
           ? ok(digest, { found: true })
           : ok('No memory indexed yet. Call kairo_memory_index.', { found: false });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_brief',
+    {
+      title: 'Continuation brief (token-efficient)',
+      description:
+        'Generate a continuation brief in tiny / normal / deep mode within a char budget ' +
+        '(ADR-0010). tiny = task/branch/changed/stop/next-3/critical-warnings only. ' +
+        'normal = default, structured but trimmed. deep = full history (opt-in).',
+      inputSchema: {
+        mode: z.enum(['tiny', 'normal', 'deep']).optional(),
+        maxChars: z.number().int().min(200).max(50_000).optional(),
+        sessionId: z.string().optional().describe("Brief for this session's latest checkpoint."),
+      },
+    },
+    async ({ mode, maxChars, sessionId }) => {
+      try {
+        const r = await sessions.buildBrief({
+          ...(mode !== undefined ? { mode } : {}),
+          ...(maxChars !== undefined ? { maxChars } : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
+        });
+        if (!r) return ok('No checkpoint yet — nothing to brief.', { found: false });
+        return ok(r.markdown, { found: true, mode: r.mode, chars: r.chars });
       } catch (e) {
         return fail(e);
       }

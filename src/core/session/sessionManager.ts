@@ -76,6 +76,8 @@ import type {
   UnifiedEvent,
 } from '../query/types.js';
 import type { QueryInputs } from '../query/queryEngine.js';
+import { buildContinuationMarkdown } from '../continuation/continuationBuilder.js';
+import { resolveBudget, clip, type BriefBudget, type BriefMode } from '../brief/budget.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
@@ -552,17 +554,23 @@ export class SessionManager {
     return this.memory.stats();
   }
 
-  /** Markdown "semantic recall" appendix injected into continuation briefs. */
-  private async recallSection(task: string): Promise<string> {
+  /**
+   * Markdown "semantic recall" appendix injected into continuation briefs.
+   * Budget-aware (ADR-0010): tiny mode → empty; normal mode → top-k small chunks.
+   */
+  private async recallSection(task: string, budget?: BriefBudget): Promise<string> {
+    const b = budget ?? resolveBudget('normal');
+    if (b.maxRecallItems <= 0) return '';
     try {
       const results = await this.memory.search(
-        { text: task, limit: 6 },
+        { text: task, limit: b.maxRecallItems },
         { checkpoint: await this.adapter.loadLatestCheckpoint(), namespace: this.namespace },
       );
       if (results.length === 0) return '';
-      const lines = results.map(
-        (r) => `- **${r.chunk.locator}** (${r.chunk.kind}, score ${r.score.toFixed(3)}) — ${r.why}`,
-      );
+      const lines = results.map((r) => {
+        const why = clip(r.why, b.maxChunkChars);
+        return `- **${r.chunk.locator}** (${r.chunk.kind}, score ${r.score.toFixed(3)}) — ${why}`;
+      });
       return [
         '',
         '## Semantic architecture recall',
@@ -719,6 +727,43 @@ export class SessionManager {
 
   async whyEvent(eventId: string): Promise<CausalityResult | undefined> {
     return whyEvent(eventId, await this.queryInputs(), this.namespace);
+  }
+
+  // ── Token-efficient brief generation (v0.8.2, ADR-0010) ─────────────────
+
+  /**
+   * Build a continuation brief in `tiny` / `normal` / `deep` mode within a
+   * character budget. Sources the latest checkpoint (or a specific session's
+   * latest, if `sessionId` is provided). Appends namespace-safe semantic recall
+   * unless the budget zeroes it out (tiny).
+   */
+  async buildBrief(
+    opts: {
+      mode?: BriefMode;
+      maxChars?: number;
+      sessionId?: string;
+    } = {},
+  ): Promise<{ markdown: string; chars: number; mode: BriefMode } | undefined> {
+    const budget = resolveBudget(
+      opts.mode ?? 'normal',
+      opts.maxChars !== undefined ? { maxBriefChars: opts.maxChars } : {},
+    );
+    let cp = await this.adapter.loadLatestCheckpoint();
+    if (opts.sessionId) {
+      const events = await this.adapter.readEvents();
+      const lastCpId = [...events]
+        .reverse()
+        .find((e) => e.type === 'checkpoint.created' && e.sessionId === opts.sessionId);
+      if (lastCpId) {
+        const id = (lastCpId.payload as { checkpointId?: string }).checkpointId;
+        if (id) cp = (await this.adapter.loadCheckpoint(id)) ?? cp;
+      }
+    }
+    if (!cp) return undefined;
+    let md = buildContinuationMarkdown(cp, { budget });
+    const recall = await this.recallSection(cp.task, budget);
+    if (recall) md = clip(md + recall, budget.maxBriefChars);
+    return { markdown: md, chars: md.length, mode: budget.mode };
   }
 
   /** Augment a checkpoint with owning worker + parent checkpoint (the DAG link). */

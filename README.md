@@ -16,6 +16,21 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.8.2 — Token efficiency as a core architecture principle.** The opposite
+failure mode of repeated rescans is a memory layer that bloats every prompt.
+Continuation briefs now have three modes — **`tiny`** (1500 chars: task / stop
+point / top-5 changed files / next 3 actions / critical warnings), **`normal`**
+(default, 4000 chars, full structure but trimmed), **`deep`** (20000 chars,
+opt-in). `kairo_graph` returns a 1-line summary + mirror path by default
+(`includeFull: true` to inline Mermaid). `kairo_memory_search` caps at 5 results
+with 120-char `why` previews. Analytics / team / risk reports write to
+`.kairo/reports/` and the MCP response is a 1–2 line pointer. New `kairo_brief`
+tool gives on-demand briefs in a chosen mode/budget. Dogfood: same checkpoint —
+tiny 632 chars (15% of deep), normal 2946 chars (71%), deep 4146 chars. Honest
+scope: budgets are character counts (deterministic, tokeniser-agnostic local
+proxy), not real tokens. See [TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and
+[ADR-0010](docs/adr/0010-token-efficiency.md).
+
 **v0.8.1 — Deterministic engineering introspection.** Read-only query layer over
 the existing event / telemetry / audit logs and checkpoint files — pure
 deterministic projections, **no new state**. Tools: `kairo_query_events`,
@@ -168,7 +183,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.8.1)
+## MCP surface (v0.8.2)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |
@@ -204,6 +219,7 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_checkpoint_lineage`  | DAG path for a checkpoint (root → target, cross-worker)              |
 | `kairo_conflict_history`    | Every denied lease with its conflicting holder                       |
 | `kairo_retrieval_trace`     | Causal context for a retrieval event                                 |
+| `kairo_brief`               | On-demand continuation brief in `tiny`/`normal`/`deep` mode (v0.8.2) |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

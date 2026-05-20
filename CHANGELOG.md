@@ -6,6 +6,54 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-05-20
+
+Token efficiency is now a **core architecture principle**. The opposite failure
+mode of repeated rescans is a memory layer that bloats every prompt — v0.8.2
+makes compactness the default. See [TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md)
+and [ADR-0010](docs/adr/0010-token-efficiency.md).
+
+### Added
+
+- **`src/core/brief/budget.ts`** — `BriefMode` (`tiny` / `normal` / `deep`),
+  `BriefBudget` (`maxBriefChars`, `maxRecallItems`, `maxChunkChars`,
+  `maxWarnings`, `includeGraphs`), `resolveBudget()`, and a preservation-aware
+  `clip()` util. Budgets are deterministic character counts (honest local proxy
+  for tokens; exact cost depends on the model's tokeniser).
+- **`kairo_brief` MCP tool** — on-demand continuation brief in a requested mode
+  and char budget (`{ mode, maxChars, sessionId? }`).
+- Brief modes in `buildContinuationMarkdown(cp, { budget })`:
+  - `tiny` — task / stop point / top-5 changed files / next 3 actions / critical
+    warnings only (defaults to 1500 chars).
+  - `normal` (**default**) — full section structure, trimmed: top-10 file table,
+    top-5 decisions, recall capped at 3 items × 200 chars (defaults to 4000
+    chars). Backward-compatible — every section header existing tests assert is
+    still present.
+  - `deep` — full historical context, opt-in (defaults to 20000 chars).
+
+### Changed
+
+- **`kairo_graph`** is **compact by default** — returns
+  `module graph: N nodes / M edges. Mirror: .kairo/graphs/module.md` instead of
+  the full Mermaid. Pass `includeFull: true` to inline the diagram.
+- **`kairo_memory_search`** capped at 5 results by default; each `why` preview
+  trimmed to 120 chars. Single-line `[kind] locator (score X.XXX) — why` format.
+- **`kairo_analytics_summary` / `_team_activity` / `_risk_report`** write the
+  full report to `.kairo/reports/*.md` and return a 1–2 line summary with the
+  file path — the report is never inlined into the prompt.
+- Semantic recall section in `SessionManager` is budget-aware: `tiny` returns no
+  recall; `normal` returns top-3 chunks each clipped to 200 chars.
+
+### Notes
+
+- Dogfood numbers on this repo: same checkpoint at `tiny` = 632 chars (15% of
+  deep), `normal` = 2946 chars (71% of deep), `deep` = 4146 chars; explicit
+  `maxChars: 1000` override → exactly 1000 chars with truncation marker.
+- Honest scope: budgets are character counts, not real tokens. Truncation is
+  preservation-aware (critical sections front-loaded) but still a heuristic.
+- Verbose remains available — `deep` mode and `includeFull: true` never lose
+  information; they just stop being the default.
+
 ## [0.8.1] - 2026-05-20
 
 Deterministic historical engineering introspection before any UI work. See
@@ -394,7 +442,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...v0.7.1

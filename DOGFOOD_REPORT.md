@@ -517,3 +517,42 @@ that gets denied, a retrieval, multiple checkpoints chained across workers.
 
 This is **historical introspection**, not real-time observability. No streams, no
 subscriptions, no UI. v0.9.0 surfaces can build on this.
+
+---
+
+# v0.8.2 — Token efficiency
+
+Same checkpoint, three modes, on the Kairo repo (`tests/tokenEfficiency.test.ts`
+and dogfood harness):
+
+| Mode     | Chars | % of deep | Section presence                                                               |
+| -------- | ----: | --------: | ------------------------------------------------------------------------------ |
+| `tiny`   |   632 |       15% | Task ✓ · Stop point ✓ · top-5 files ✓ · next 3 actions ✓ · critical warnings ✓ |
+| `normal` |  2946 |       71% | Engineering risk ✓ · Recommended next actions ✓ · file table capped at 10      |
+| `deep`   |  4146 |      100% | All sections, no truncation rows                                               |
+
+- Explicit `maxChars: 1000` override → exactly **1000 chars** with trailing `…`.
+- `kairo_graph` compact response: `module graph: N nodes / M edges. Mirror:
+.kairo/graphs/module.md` — no inline Mermaid unless `includeFull: true`.
+- `kairo_memory_search` compact response: 5 results, each `[kind] locator
+(score X.XXX) — why` with `why` clipped to 120 chars.
+- Analytics / team / risk MCP responses: 1–2 line summary + path to
+  `.kairo/reports/*.md` — never inlined.
+
+## Findings
+
+- **Compactness verified** without losing engineering continuity: `normal` still
+  carries every section header that prior versions asserted, so existing
+  consumers keep working.
+- **Truncation is preservation-aware**: critical sections are front-loaded so
+  tail-clipping retains the most important content.
+- **Verbose remains available**: `deep` mode and `includeFull: true` are
+  one-flag opt-ins — Kairo never loses information; it just stops pasting it
+  into every prompt by default.
+
+## Honest scope
+
+Budgets are **character counts**, not real tokens. They are a deterministic,
+tokeniser-agnostic local proxy; exact token cost depends on the model.
+Persisted `.kairo/` artefacts (events, checkpoints, telemetry) are not
+truncated — those remain the source of truth.

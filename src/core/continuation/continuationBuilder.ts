@@ -1,12 +1,67 @@
 import type { Checkpoint, SessionState } from '../../types/domain.js';
 import { unresolvedErrors } from '../session/reducer.js';
+import { resolveBudget, clip, type BriefBudget } from '../brief/budget.js';
 
 /**
- * Generates the next-agent continuation brief. This is Kairo's anti-rescan payload:
- * the next agent should be able to resume from this alone, without re-deriving repo
- * understanding from scratch.
+ * Generates the next-agent continuation brief in one of three modes
+ * (v0.8.2, ADR-0010):
+ *   - `tiny`   — task / stop / next 3 / changed-file count + top 5 / critical warnings.
+ *   - `normal` — default; full structure but trimmed (top files/decisions, no graphs).
+ *   - `deep`   — full historical context (opt-in).
+ *
+ * Backward-compatible: with no opts it defaults to `normal`, which still includes
+ * every section the existing tests assert (the change is *size*, not *structure*).
  */
-export function buildContinuationMarkdown(cp: Checkpoint): string {
+export interface BuildBriefOptions {
+  budget?: BriefBudget;
+}
+
+export function buildContinuationMarkdown(cp: Checkpoint, opts: BuildBriefOptions = {}): string {
+  const budget = opts.budget ?? resolveBudget('normal');
+  const md = budget.mode === 'tiny' ? renderTiny(cp, budget) : renderFull(cp, budget);
+  // Budget-truncate from the tail — critical sections are front-loaded.
+  return clip(md, budget.maxBriefChars);
+}
+
+function renderTiny(cp: Checkpoint, b: BriefBudget): string {
+  const L: string[] = [];
+  L.push('# Kairo Continuation Brief (tiny)');
+  L.push('');
+  L.push(`- **Task:** ${cp.task || '_unspecified_'}`);
+  L.push(
+    `- **Stop point:** ${cp.reason} · risk ${cp.risk.level.toUpperCase()} · pressure ${cp.pressure.directive}`,
+  );
+  L.push(
+    `- **Files changed:** ${cp.changedFiles.length}` +
+      (cp.changedFiles.length === 0
+        ? ''
+        : ` — top: ${[...cp.changedFiles]
+            .sort((a, b) => rank(b) - rank(a))
+            .slice(0, 5)
+            .map((f) => f.path)
+            .join(', ')}`),
+  );
+  const next = recommendNextActions(cp).slice(0, 3);
+  if (next.length > 0) {
+    L.push('- **Next:**');
+    for (const a of next) L.push(`  1. ${a}`);
+  }
+  const warnings: string[] = [];
+  for (const e of cp.unresolvedErrors.slice(0, b.maxWarnings)) warnings.push(`⚠️ ${e.message}`);
+  for (const f of cp.risk.factors
+    .filter((r) => r.level !== 'low')
+    .slice(0, b.maxWarnings - warnings.length)) {
+    warnings.push(`⚠️ ${f.detail}`);
+  }
+  if (warnings.length > 0) {
+    L.push('- **Critical warnings:**');
+    for (const w of warnings) L.push(`  - ${w}`);
+  }
+  return L.join('\n');
+}
+
+function renderFull(cp: Checkpoint, b: BriefBudget): string {
+  const isNormal = b.mode === 'normal';
   const L: string[] = [];
   const list = (items: string[], empty: string): void => {
     if (items.length === 0) L.push(`_${empty}_`);
@@ -56,9 +111,17 @@ export function buildContinuationMarkdown(cp: Checkpoint): string {
   } else {
     L.push('| File | Change | Risk | Touches | Note |');
     L.push('|---|---|---|---|---|');
-    for (const f of [...cp.changedFiles].sort((a, b) => rank(b) - rank(a))) {
+    // Normal mode caps the file table; deep mode shows everything.
+    const cap = isNormal ? 10 : cp.changedFiles.length;
+    const rows = [...cp.changedFiles].sort((a, b) => rank(b) - rank(a)).slice(0, cap);
+    for (const f of rows) {
       L.push(
         `| \`${f.path}\` | ${f.changeKind} | ${f.risk.toUpperCase()} | ${f.touches} | ${f.note ?? ''} |`,
+      );
+    }
+    if (cp.changedFiles.length > rows.length) {
+      L.push(
+        `| _…and ${cp.changedFiles.length - rows.length} more (deep mode shows all)_ | | | | |`,
       );
     }
   }
@@ -68,9 +131,11 @@ export function buildContinuationMarkdown(cp: Checkpoint): string {
   if (cp.decisions.length === 0) {
     L.push('_None recorded._');
   } else {
-    for (const d of cp.decisions) {
+    const cap = isNormal ? 5 : cp.decisions.length;
+    for (const d of cp.decisions.slice(0, cap)) {
       L.push(`- **${d.summary}**${d.rationale ? ` — ${d.rationale}` : ''}`);
     }
+    if (cp.decisions.length > cap) L.push(`- _…and ${cp.decisions.length - cap} more._`);
   }
   L.push('');
 
@@ -78,8 +143,12 @@ export function buildContinuationMarkdown(cp: Checkpoint): string {
   if (cp.unresolvedErrors.length === 0) {
     L.push('_None._');
   } else {
-    for (const e of cp.unresolvedErrors) {
+    const cap = b.maxWarnings;
+    for (const e of cp.unresolvedErrors.slice(0, cap)) {
       L.push(`- ${e.message}${e.context ? ` _(context: ${e.context})_` : ''}`);
+    }
+    if (cp.unresolvedErrors.length > cap) {
+      L.push(`- _…and ${cp.unresolvedErrors.length - cap} more._`);
     }
   }
   L.push('');
