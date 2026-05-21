@@ -111,3 +111,36 @@ jobs:
             }
             console.log('doctor JSON shape: ok=' + j.ok + ', checks=' + j.checks.length);
           "
+
+      - name: Smoke — kairo init writes .mcp.json + .gitignore idempotently
+        run: |
+          set -e
+          cd "$RUNNER_TEMP/consumer"
+          ./node_modules/.bin/kairo init --json > init.json
+          node -e "
+            const j = require('$RUNNER_TEMP/consumer/init.json');
+            if (j.mcpJson !== 'written' || (j.gitignore !== 'appended' && j.gitignore !== 'skipped')) {
+              console.error('init JSON shape regressed:', JSON.stringify(j));
+              process.exit(1);
+            }
+            console.log('init JSON shape: mcpJson=' + j.mcpJson + ' gitignore=' + j.gitignore + ' detectedHost=' + j.detectedHost);
+          "
+          test -f .mcp.json
+          node -e "
+            const m = require('$RUNNER_TEMP/consumer/.mcp.json');
+            if (!m.mcpServers || !m.mcpServers.kairo) {
+              console.error('.mcp.json missing kairo entry:', JSON.stringify(m));
+              process.exit(1);
+            }
+            console.log('.mcp.json wires:', Object.keys(m.mcpServers).join(','));
+          "
+          # Second run must be idempotent (no overwrite without --force).
+          ./node_modules/.bin/kairo init --json > init2.json
+          node -e "
+            const j = require('$RUNNER_TEMP/consumer/init2.json');
+            if (j.mcpJson !== 'skipped') {
+              console.error('init is NOT idempotent:', JSON.stringify(j));
+              process.exit(1);
+            }
+            console.log('init is idempotent (second run skipped)');
+          "

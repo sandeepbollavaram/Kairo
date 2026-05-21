@@ -6,6 +6,66 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-21
+
+**npm distribution.** Kairo becomes installable like a real developer
+tool. No new architecture subsystems, no schema changes, no new MCP
+tools — packaging, distribution, install smoke, docs.
+
+### Added
+
+- **`PUBLISHING.md`** — single-file maintainer runbook covering npm
+  account / 2FA prerequisites, the pre-publish gate (mirrors the
+  install-smoke CI job), the actual `npm publish` flow, and the
+  72-hour `npm deprecate` / `npm unpublish` discipline. Every
+  `npm publish` is a human decision; this file is the reference.
+
+- **`publishConfig.access: "public"`** in `package.json` — defensive
+  (the package name is unscoped, so this is already npm's default,
+  but explicit-over-implicit is cheaper to get right once).
+
+- **Expanded npm `keywords`** (15 entries, up from 7) for npm search
+  discoverability: adds `claude`, `cursor`, `ai-coding`, `agent-memory`,
+  `local-first`, `deterministic`, `cli`, `typescript`. No behaviour
+  change — npm metadata only.
+
+- **Install-smoke now exercises `kairo init`** end-to-end. The CI
+  job (1) installs the packed tarball into a fresh project, (2)
+  runs `kairo init --json` and asserts `mcpJson === 'written'`,
+  (3) verifies `.mcp.json` exists and wires `kairo`, (4) re-runs
+  `kairo init --json` and asserts the second run reports `mcpJson
+  === 'skipped'` (idempotency contract). Catches every packaging
+  regression that affects the documented Quick start path.
+
+### Changed
+
+- **README Quick start now leads with `npm install -g kairo-mcp`**.
+  The git-install path is preserved as a "dev tip" fallback for users
+  who want main-branch builds. The `npx -p kairo-mcp kairo init`
+  no-install path is documented honestly — including *why* `-p
+  kairo-mcp` is needed (npm packages with multiple bins resolve
+  `npx <pkg>` to the bin matching the package name, which here is the
+  MCP server, not the CLI).
+
+### Not done in this release (deliberate)
+
+- **No actual `npm publish` from this commit.** v1.3.0 is *ready*
+  to publish, but the publish itself is a human action run from a
+  clean local checkout with 2FA. See `PUBLISHING.md`.
+- No MCP tool, schema, persisted artefact, or stability registry
+  changes. The CLI surface remains experimental per ADR-0016.
+
+### Notes
+
+- 193/193 tests pass.
+- `npm pack --dry-run` confirms a clean 266 kB / 384-file tarball:
+  no `.kairo/`, no tests, no fixtures, no `.git`, no `.github`. Only
+  `dist/`, `README.md`, `LICENSE`, `CHANGELOG.md` ship.
+- The three bins (`kairo`, `kairo-mcp`, `kairo-inspect`) all land on
+  PATH after `npm install -g kairo-mcp`. After publish, the
+  documented Quick start becomes `npm install -g kairo-mcp; cd
+  your-project; kairo init` — three commands, ≤60 seconds.
+
 ## [1.2.0] - 2026-05-21
 
 **DevEx polish — CLI UX + README clarity.** No new architecture
@@ -1031,7 +1091,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...v1.1.2

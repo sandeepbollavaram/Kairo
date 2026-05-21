@@ -111,15 +111,27 @@ Out of scope **by design**, not deferred.
 In any project:
 
 ```bash
-# 1. Install
-npm install github:sandy001-kki/Kairo
+# 1. Install (globally, so the `kairo` binary lands on PATH)
+npm install -g kairo-mcp
 
 # 2. Wire it into your MCP host (Claude Code, Cursor, etc.)
-npx kairo init
+cd your-project
+kairo init
 
 # 3. Verify
-npx kairo doctor
+kairo doctor
 ```
+
+> **Don't want a global install?** Use `npx -p kairo-mcp kairo init`. The
+> `-p kairo-mcp` flag tells npx "fetch the `kairo-mcp` package and run the
+> `kairo` bin from it" — needed because npm packages can have multiple bins
+> and `npx <pkg>` defaults to the bin matching the package name (which here
+> is the MCP server, not the CLI). Once you've used npx once it's cached;
+> subsequent calls are instant.
+
+> **Want the pre-release / dev tip?** `npm install -g github:sandy001-kki/Kairo`
+> builds from the latest commit on `main` instead of the published npm
+> version. Same `kairo` CLI; identical behaviour.
 
 `kairo init` detects your MCP host (Claude Code, Cursor, …) and prints a
 3-step "next steps" block. Output looks like:
