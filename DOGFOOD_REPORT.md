@@ -665,3 +665,68 @@ migration + quarantine path against synthetic fixtures and the e2e flow.
   semantic ("the value is internally consistent with field Y").
 - Quarantine is last-resort. Append-only writes + `writeAtomic` +
   torn-line tolerance remain the primary defences.
+
+---
+
+# v0.9.2 — Snapshot/import/export + failure injection
+
+Second slice of v0.9.x stabilization. Verified the snapshot round-trip
+and the fault-injection contract against synthetic projects.
+
+## Snapshot round-trip
+
+- Seeded a temp project with a session, one file change, one decision,
+  one checkpoint, one session-end.
+- `exportSnapshot(root, { now: pinned })` produced
+  `.kairo/snapshots/snapshot-2026-05-21T00-00-00-000Z.json` containing
+  the manifest + every artefact.
+- Two consecutive exports with the same `now` produced **identical**
+  `contentSha256` values — canonical-JSON keys-sorted serialisation
+  works as designed.
+- `importSnapshot(emptyRoot, path)` reconstructed the target `.kairo/`
+  and a re-export of the target produced the same `contentSha256` as
+  the source. Round-trip is byte-identical-by-hash for clean sources.
+
+## Refuses to clobber
+
+- Import into a non-empty `.kairo/` throws `Refusing to import: …`.
+- `{ force: true }` succeeds and the target `.kairo/` is overwritten in
+  the additive sense (snapshot writes flow through the normal adapter
+  seam — events are appended, sessions and checkpoints saved per-id).
+
+## Migration on the way in
+
+- Records inside a snapshot pass through the v0.9.1 migration registry
+  on import — legacy fixtures (no `schema` field) emerge tagged.
+- An unsupported `snapshotSchema` (e.g. 999) is rejected with a clear
+  error before any write happens.
+
+## Fault injection
+
+- `FaultInjector.failOn('appendEvent')` causes the next `appendEvent`
+  to throw; subsequent calls succeed (one-shot default).
+- `{ afterN: 2, repeating: true }` skips the first call, then fires
+  on every call thereafter.
+- `FaultInjectingAdapter` delegates every other method to the real
+  adapter unchanged — verified by reading back an event that was
+  written after a simulated initial failure.
+
+## Findings
+
+- **Determinism preserved.** `contentSha256` is stable across exports
+  and across machines (no clock dependency in the canonical payload).
+- **No bypass of redaction.** The importer writes via
+  `withRedaction(...)`, so a snapshot carrying secrets that slipped
+  past the source redactor cannot bypass the target redactor.
+- **No quarantine on healthy round-trips.** A clean export → import
+  produces no `.kairo/quarantine/` entries on the target.
+
+## Honest scope
+
+- Snapshots are **full dumps**. Large `.kairo/` directories produce
+  large files; gzip externally if needed. No streaming, no delta.
+- `contentSha256` proves integrity, not authenticity. Sign externally
+  if you need provenance guarantees.
+- Fault injection is in-process simulation, not real OS error
+  exercise. It proves the handler is correct, not that the OS layer
+  is correct.

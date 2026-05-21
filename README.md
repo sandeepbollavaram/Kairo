@@ -16,6 +16,20 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.9.2 — Snapshot/import/export & failure-injection testing.** Second
+slice of v0.9.x stabilization. Portable single-file snapshots
+(`.kairo/snapshots/snapshot-{ts}.json`) capture the full `.kairo/` state —
+events, telemetry, audit, sessions, checkpoints, continuations, graphs,
+intelligence, vector index — with a canonical-JSON `contentSha256` so two
+exports of the same `.kairo/` are byte-identical-by-hash. Import refuses
+to overwrite a non-empty `.kairo/` unless `force: true`; records pass
+through redaction and v0.9.1 migrations on the way in. Two new MCP tools
+(`kairo_snapshot_export`, `kairo_snapshot_import`). `FaultInjector` +
+`FaultInjectingAdapter` (`src/storage/faultAdapter.ts`) wrap any
+`StorageAdapter` for deterministic in-process error-path testing —
+test-only by convention. See [SNAPSHOTS.md](docs/SNAPSHOTS.md) and
+[ADR-0013](docs/adr/0013-snapshots-and-failure-injection.md).
+
 **v0.9.1 — Schema versioning, formal contracts & corruption quarantine.**
 First slice of v0.9.x stabilization (advanced prototype → durable
 infrastructure). Every persisted artefact (`KairoEvent`, `TelemetryEvent`,
@@ -212,7 +226,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.9.1)
+## MCP surface (v0.9.2)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |
@@ -249,6 +263,8 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_conflict_history`    | Every denied lease with its conflicting holder                       |
 | `kairo_retrieval_trace`     | Causal context for a retrieval event                                 |
 | `kairo_brief`               | On-demand continuation brief in `tiny`/`normal`/`deep` mode (v0.8.2) |
+| `kairo_snapshot_export`     | Export `.kairo/` to a single JSON snapshot file (v0.9.2)             |
+| `kairo_snapshot_import`     | Import a snapshot into a target project root (v0.9.2)                |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

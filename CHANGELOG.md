@@ -6,6 +6,43 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-05-21
+
+Second slice of v0.9.x stabilization: portable snapshot/import/export and a
+deterministic failure-injection adapter for testing error paths. See
+[SNAPSHOTS.md](docs/SNAPSHOTS.md) and
+[ADR-0013](docs/adr/0013-snapshots-and-failure-injection.md).
+
+### Added
+
+- **`src/snapshot/`** — single-file portable snapshot format. `KairoSnapshot`
+  bundles the full `.kairo/` state with a manifest (counts, schema versions,
+  source root, `contentSha256` over canonical JSON).
+- `exportSnapshot(projectRoot, opts?)` — reads through the v0.9.1 migration
+  + validation pipeline, computes a deterministic `contentSha256`, writes a
+  single JSON file to `.kairo/snapshots/snapshot-{ts}.json` (override via
+  `path`).
+- `importSnapshot(target, snapshotPath, opts?)` — refuses to overwrite a
+  non-empty `.kairo/` unless `force: true`; writes through the redacting
+  adapter; runs records through migrations on the way in.
+- **`src/storage/faultAdapter.ts`** — `FaultInjector` + `FaultInjectingAdapter`
+  wrap any `StorageAdapter` for deterministic in-process error-path testing.
+  Rules: `afterN`, `repeating`, custom `error`. Test-only by convention
+  (constructor logs a warning when `NODE_ENV !== "test"`).
+- Two new MCP tools: `kairo_snapshot_export` and `kairo_snapshot_import`.
+  Compact responses with structured payloads.
+
+### Notes
+
+- **Round-trip guarantee**: `export → import → re-export` yields the same
+  `contentSha256` for a clean source with no secrets.
+- **Honest scope**: snapshots are full dumps (no delta), plain JSON (no
+  encryption), and not signed (`contentSha256` proves integrity, not
+  authenticity). Fault injection simulates handler behaviour — it does
+  not exercise the real OS layer.
+- 149/149 tests, including new `tests/snapshot.test.ts` (6) and
+  `tests/faultInjection.test.ts` (6).
+
 ## [0.9.1] - 2026-05-21
 
 First slice of v0.9.x stabilization: schema versioning, formal contracts, and
@@ -530,7 +567,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...v0.8.2

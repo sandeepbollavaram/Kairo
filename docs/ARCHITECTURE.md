@@ -123,7 +123,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.8.1     | Deterministic engineering introspection (read-only query layer)                                             |
 | 0.8.2     | Token efficiency as a core architecture principle                                                           |
 | 0.9.0     | Developer surfaces & operational inspection (web inspector + VS Code)                                       |
-| **0.9.1** | Schema versioning, formal contracts & corruption quarantine — _this release_                                |
+| 0.9.1     | Schema versioning, formal contracts & corruption quarantine                                                 |
+| **0.9.2** | Snapshot/import/export & failure-injection testing — _this release_                                         |
 | 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint

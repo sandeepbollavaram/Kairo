@@ -4,6 +4,8 @@ import type { SessionManager, RecordKind } from '../core/session/sessionManager.
 import { summarizeIntelligence } from '../core/repo/summary.js';
 import { ok, fail } from './responses.js';
 import { KairoError } from '../utils/errors.js';
+import { exportSnapshot } from '../snapshot/export.js';
+import { importSnapshot } from '../snapshot/import.js';
 
 function projectRootFrom(explicit?: string): string {
   return explicit ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd();
@@ -1086,6 +1088,86 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
             line('  latest checkpoint.created', t.latestCheckpointBefore),
           ].join('\n'),
           { found: true, trace: t },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  // ── Snapshot / import / export (v0.9.2, ADR-0013) ────────────────────────
+
+  server.registerTool(
+    'kairo_snapshot_export',
+    {
+      title: 'Snapshot export',
+      description:
+        'Export the full .kairo/ state to a single self-describing JSON snapshot file ' +
+        '(ADR-0013). Reads pass through schema migration + validation. Local-only; no network. ' +
+        'Default destination: .kairo/snapshots/snapshot-{ts}.json.',
+      inputSchema: {
+        path: z.string().optional().describe('Override absolute destination path.'),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ path, projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const opts = path === undefined ? {} : { path };
+        const r = await exportSnapshot(root, opts);
+        const c = r.snapshot.manifest.counts;
+        return ok(
+          `Snapshot: ${r.bytes} bytes → ${r.path}. ` +
+            `events=${c.events} telemetry=${c.telemetry} sessions=${c.sessions} ` +
+            `checkpoints=${c.checkpoints} sha256=${r.contentSha256.slice(0, 12)}…`,
+          {
+            path: r.path,
+            bytes: r.bytes,
+            contentSha256: r.contentSha256,
+            manifest: r.snapshot.manifest,
+          },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_snapshot_import',
+    {
+      title: 'Snapshot import',
+      description:
+        'Import a Kairo snapshot JSON file into the target project root (ADR-0013). ' +
+        'Refuses to overwrite a non-empty .kairo/ unless force=true. Writes pass through ' +
+        'redaction and run records through the migration registry.',
+      inputSchema: {
+        path: z.string().describe('Absolute path to the snapshot JSON file.'),
+        projectRoot: z.string().optional(),
+        force: z
+          .boolean()
+          .optional()
+          .describe('Allow writing on top of an existing non-empty .kairo/. Default false.'),
+        redact: z
+          .boolean()
+          .optional()
+          .describe('Run inbound records through redaction. Default true.'),
+      },
+    },
+    async ({ path, projectRoot, force, redact }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const opts: { force?: boolean; redact?: boolean } = {};
+        if (force !== undefined) opts.force = force;
+        if (redact !== undefined) opts.redact = redact;
+        const r = await importSnapshot(root, path, opts);
+        const c = r.ingested;
+        return ok(
+          `Imported into ${r.targetProjectRoot}: events=${c.events} telemetry=${c.telemetry} ` +
+            `sessions=${c.sessions} checkpoints=${c.checkpoints} ` +
+            `continuations=${c.continuations} intelligence=${c.intelligence} vector=${c.vectorIndex}.` +
+            (r.warnings.length > 0 ? ` Warnings: ${r.warnings.join('; ')}` : ''),
+          r,
         );
       } catch (e) {
         return fail(e);

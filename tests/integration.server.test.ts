@@ -89,6 +89,8 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_team_activity',
         'kairo_risk_report',
         'kairo_module_activity',
+        'kairo_snapshot_export',
+        'kairo_snapshot_import',
       ]),
     );
   });
