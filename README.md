@@ -112,7 +112,7 @@ In any project:
 
 ```bash
 # 1. Install
-npm install github:sandy001-kki/Kairo#v1.1.0
+npm install github:sandy001-kki/Kairo
 
 # 2. Wire it into your MCP host (Claude Code, Cursor, etc.)
 npx kairo init
@@ -121,7 +121,23 @@ npx kairo init
 npx kairo doctor
 ```
 
-You should see:
+`kairo init` detects your MCP host (Claude Code, Cursor, …) and prints a
+3-step "next steps" block. Output looks like:
+
+```
+Initialised
+  .mcp.json:   written
+  .gitignore:  appended
+  mcp host:    claude
+
+Next steps
+  1. Open Claude Code in this project: claude
+  2. Inside the session, run: /mcp
+     → you should see  kairo · connected · 41 tools
+  3. If anything looks off, run: kairo doctor
+```
+
+`kairo doctor` is your one-stop check:
 
 ```
 Doctor
@@ -130,7 +146,7 @@ Doctor
   ok  .mcp.json wires kairo  ./.mcp.json
   !!  .kairo/ present        (none yet — first MCP session creates it)
   ok  quarantine empty       clean
-  ok  version match          installed=1.1.0 cli=1.1.0
+  ok  version match          installed=1.2.0 cli=1.2.0
 
 next: 1 check(s) need attention.
 ```
@@ -150,8 +166,13 @@ $ npx kairo init
 Initialised
   .mcp.json:   written
   .gitignore:  appended
+  mcp host:    claude
 
-next: open Claude Code in this project, then run /mcp — kairo should be connected.
+Next steps
+  1. Open Claude Code in this project: claude
+  2. Inside the session, run: /mcp
+     → you should see  kairo · connected · 41 tools
+  3. If anything looks off, run: kairo doctor
 
 # ── Day 1: open Claude Code, work for an hour, end the session ────────
 $ npx kairo status
@@ -464,7 +485,7 @@ Every command honours `--json`, `--quiet`, `--verbose`, `--no-color`,
 
 ---
 
-## MCP surface (v1.1.0)
+## MCP surface (v1.2.0)
 
 41 tools total — 33 stable + 6 experimental. The full list:
 
@@ -571,7 +592,7 @@ MIT. See [`LICENSE`](LICENSE).
 
 ---
 
-## Roadmap (post-v1.1.0)
+## Roadmap (post-v1.2.0)
 
 Honest list — no marketing, no AGI:
 

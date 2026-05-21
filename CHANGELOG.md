@@ -6,6 +6,61 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-21
+
+**DevEx polish — CLI UX + README clarity.** No new architecture
+subsystems. No schema changes. No new MCP tools. Pure surface polish
+across the developer-facing edges that were rough on first contact.
+
+### Changed
+
+- **Top-level `kairo --help`** gains a 3-line **Quick start** callout
+  above the command list so first-time users see action items
+  (`cd → init → doctor → status`) instead of a flat command catalogue.
+  The footer hint now points to `kairo doctor` when something looks
+  off, not just `kairo help <command>`.
+
+- **`kairo init`** now detects the MCP host on `PATH` (currently
+  recognises Claude Code; structured to grow) and prints a concrete
+  3-step **Next steps** block tailored to what was found:
+  ```
+  Initialised
+    .mcp.json:   written
+    .gitignore:  appended
+    mcp host:    claude
+
+  Next steps
+    1. Open Claude Code in this project: claude
+    2. Inside the session, run: /mcp
+       → you should see  kairo · connected · 41 tools
+    3. If anything looks off, run: kairo doctor
+  ```
+  The `--json` output gains a `detectedHost` field. Existing
+  `mcpJson` / `gitignore` / `projectRoot` fields are unchanged.
+
+- **`kairo doctor`** now correctly handles the case where it's run
+  from inside the `kairo-mcp` dev repo itself (where `dist/index.js`
+  lives at the repo root, not under `node_modules/kairo-mcp/`). The
+  `kairo-mcp installed` and `version match` checks fall back to the
+  self-install path when `node_modules/kairo-mcp/` is absent but the
+  current `package.json` says `name: "kairo-mcp"`.
+
+- **`README.md`** Quick start and Real workflow sections updated to
+  the v1.2.0 output: realistic `kairo init` block with detected host
+  + next-steps; install line no longer pins to a stale v1.1.0 tag.
+
+### Notes
+
+- 193/193 tests still pass. CI matrix (6 cells + install-smoke) all
+  green on v1.1.3 baseline; v1.2.0 changes don't touch any tested
+  invariant.
+- Stability registry unchanged. No new MCP tools. No new persisted
+  artefacts. The CLI surface remains experimental per ADR-0016.
+- Success condition for this slice (per the brief): _"a new
+  developer should understand Kairo and run it on a repo in under
+  5 minutes."_ The `init → doctor → status` happy path now takes
+  3 commands and reads honestly at every step.
+
 ## [1.1.3] - 2026-05-21
 
 CI caught another real bug, this time on `ubuntu-latest · node 20`. The
@@ -976,7 +1031,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...v1.1.1

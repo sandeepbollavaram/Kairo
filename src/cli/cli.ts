@@ -180,6 +180,14 @@ function renderTopLevelHelp(out: Output): void {
   out.line(`${out.bold('kairo')} ${out.dim(`v${SERVER_VERSION}`)}`);
   out.line();
   out.line('Persistent engineering memory and session continuity for AI coding agents.');
+  out.line(out.dim('Local-first · deterministic · replay-safe.'));
+  out.line();
+  // 60-second quick start, dim so it's scannable but not loud.
+  out.line(out.bold('Quick start'));
+  out.line(`  ${out.dim('$')} cd your-project`);
+  out.line(`  ${out.dim('$')} kairo init           ${out.dim('# wire .mcp.json + .gitignore')}`);
+  out.line(`  ${out.dim('$')} kairo doctor         ${out.dim('# verify install')}`);
+  out.line(`  ${out.dim('$')} kairo status         ${out.dim('# once an agent has run')}`);
   out.line();
   out.line(out.bold('Usage'));
   out.line('  kairo [--json] [--quiet] [--verbose] [--no-color] [-C PATH] <command> [args]');
@@ -195,7 +203,9 @@ function renderTopLevelHelp(out: Output): void {
     out.line(`  ${tag.padEnd(20)} ${out.dim(f.help)}`);
   }
   out.line();
-  out.line(`Run ${out.cyan('kairo help <command>')} for detail.`);
+  out.line(
+    `Run ${out.cyan('kairo help <command>')} for detail, or ${out.cyan('kairo doctor')} if something looks off.`,
+  );
 }
 
 function renderCommandHelp(out: Output, cmd: CommandSpec): void {

@@ -722,16 +722,55 @@ const initCmd: CommandSpec = {
       result.gitignore = 'appended';
     }
 
+    // 3. Detect MCP host (best-effort — purely informational; no IO at runtime).
+    const host = detectMcpHost();
+    result.detectedHost = host;
+
     if (ctx.out.maybeJson(result)) return { exitCode: 0 };
     ctx.out.heading('Initialised');
     ctx.out.kv([
       ['.mcp.json', String(result.mcpJson)],
       ['.gitignore', String(result.gitignore)],
+      ['mcp host', host === 'none' ? ctx.out.dim('not detected') : ctx.out.green(host)],
     ]);
-    ctx.out.hint('open Claude Code in this project, then run `/mcp` — kairo should be connected.');
+    ctx.out.line();
+    ctx.out.line(ctx.out.bold('Next steps'));
+    if (host === 'claude') {
+      ctx.out.line(
+        `  ${ctx.out.dim('1.')} Open Claude Code in this project: ${ctx.out.cyan('claude')}`,
+      );
+      ctx.out.line(`  ${ctx.out.dim('2.')} Inside the session, run: ${ctx.out.cyan('/mcp')}`);
+      ctx.out.line(`     ${ctx.out.dim('→ you should see  kairo · connected · 41 tools')}`);
+      ctx.out.line(
+        `  ${ctx.out.dim('3.')} If anything looks off, run: ${ctx.out.cyan('kairo doctor')}`,
+      );
+    } else {
+      ctx.out.line(
+        `  ${ctx.out.dim('1.')} Open your MCP host (Claude Code / Cursor / Claude Desktop) in this project.`,
+      );
+      ctx.out.line(
+        `  ${ctx.out.dim('2.')} It should auto-load .mcp.json and connect Kairo on next session.`,
+      );
+      ctx.out.line(`  ${ctx.out.dim('3.')} Verify with: ${ctx.out.cyan('kairo doctor')}`);
+    }
     return { exitCode: 0 };
   },
 };
+
+/** Best-effort detection of an MCP host on PATH. Synchronous & cross-platform. */
+function detectMcpHost(): 'claude' | 'none' {
+  // Avoid spawning anything; just check whether `claude` resolves on PATH.
+  // Node's `process.env.PATH` parsing is the simplest cross-platform check.
+  const pathDirs = (process.env.PATH ?? '').split(process.platform === 'win32' ? ';' : ':');
+  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      if (existsSync(join(dir, `claude${ext}`))) return 'claude';
+    }
+  }
+  return 'none';
+}
 
 // ── doctor ─────────────────────────────────────────────────────────────
 
@@ -754,13 +793,19 @@ const doctorCmd: CommandSpec = {
       detail: existsSync(pkgJson) ? root : `no package.json at ${root}`,
     });
 
-    const mcpDist = join(root, 'node_modules', 'kairo-mcp', 'dist', 'index.js');
+    // Consumer install path OR "I am running doctor from inside the kairo-mcp
+    // dev repo itself" (where dist/ is at the root, not under node_modules).
+    const consumerDist = join(root, 'node_modules', 'kairo-mcp', 'dist', 'index.js');
+    const selfDist = join(root, 'dist', 'index.js');
+    let mcpDist: string | undefined;
+    if (existsSync(consumerDist)) mcpDist = consumerDist;
+    else if (existsSync(selfDist)) mcpDist = selfDist;
     checks.push({
       name: 'kairo-mcp installed',
-      ok: existsSync(mcpDist),
-      detail: existsSync(mcpDist)
-        ? mcpDist
-        : 'run `npm install github:sandy001-kki/Kairo#v' + SERVER_VERSION + '`',
+      ok: mcpDist !== undefined,
+      detail:
+        mcpDist ??
+        `run \`npm install github:sandy001-kki/Kairo#v${SERVER_VERSION}\` in this project`,
     });
 
     const mcpJsonPath = join(root, '.mcp.json');
@@ -809,16 +854,34 @@ const doctorCmd: CommandSpec = {
           : `${quarantineCount} record(s) — inspect ${paths.quarantineDir}`,
     });
 
-    // Version match
+    // Version match — consumer install OR running from inside the kairo-mcp dev repo.
     try {
-      const pkgPath = join(root, 'node_modules', 'kairo-mcp', 'package.json');
-      const installed = (JSON.parse(await readFile(pkgPath, 'utf8')) as { version: string })
-        .version;
-      checks.push({
-        name: 'version match',
-        ok: installed === SERVER_VERSION,
-        detail: `installed=${installed} cli=${SERVER_VERSION}`,
-      });
+      const consumerPkg = join(root, 'node_modules', 'kairo-mcp', 'package.json');
+      const selfPkg = join(root, 'package.json');
+      let pkgPath: string | undefined;
+      if (existsSync(consumerPkg)) pkgPath = consumerPkg;
+      else if (existsSync(selfPkg)) {
+        // Only treat the project root's package.json as the kairo-mcp source of
+        // truth when it actually IS kairo-mcp (e.g. running doctor from the
+        // dev repo itself). Avoids confusing Flexdee's package.json with ours.
+        const own = JSON.parse(await readFile(selfPkg, 'utf8')) as { name?: string };
+        if (own.name === 'kairo-mcp') pkgPath = selfPkg;
+      }
+      if (!pkgPath) {
+        checks.push({
+          name: 'version match',
+          ok: false,
+          detail: 'kairo-mcp not installed in this project',
+        });
+      } else {
+        const installed = (JSON.parse(await readFile(pkgPath, 'utf8')) as { version: string })
+          .version;
+        checks.push({
+          name: 'version match',
+          ok: installed === SERVER_VERSION,
+          detail: `installed=${installed} cli=${SERVER_VERSION}`,
+        });
+      }
     } catch {
       checks.push({
         name: 'version match',
