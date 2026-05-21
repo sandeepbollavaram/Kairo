@@ -6,6 +6,37 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-05-21
+
+First downstream CI run caught a real Windows + Node 22 flake. Single-line
+timeout fix; no code-layer change. Caught and fixed within an hour of
+v1.1.1 going green — exactly the loop ADR-0017 promised.
+
+### Fixed
+
+- **`tests/snapshot.test.ts` "refuses to overwrite a non-empty .kairo/
+  unless force" timed out at 5000ms on `windows-latest · node 22`.** The
+  test does ~2× the work of any other snapshot test (two full
+  `seedProject` calls + one export + two imports — one rejected, one with
+  `force`). Default Vitest 5s ceiling flaked on slow Windows + Node 22 CI
+  runners where `mkdtemp` / `rm -rf` / `spawn` are slower. The other five
+  matrix cells (ubuntu × 2, macos × 2, windows + node 20) all passed.
+
+  Two-part fix:
+  - **Per-test timeout 20s** on that specific test — deterministic ceiling
+    for the proven-heavy case.
+  - **Global `testTimeout: 15_000`** in `vitest.config.ts` — safety net for
+    other honest integration tests in this suite (snapshot round-trip,
+    inspect-server boot, perf scenarios) that do real filesystem + spawn
+    work. Fast tests are unaffected; the default 5s is just too tight as a
+    cross-platform ceiling.
+
+### Notes
+
+- 193/193 tests pass on the v1.1.2 commit on Windows × Node 20 + 22
+  locally; the matrix gate ran across all six cells.
+- No change to MCP tools, schemas, or any stable surface. Test infra only.
+
 ## [1.1.1] - 2026-05-21
 
 **Operational CI & repository polish.** No code-layer changes, no
@@ -913,7 +944,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...v1.0.1

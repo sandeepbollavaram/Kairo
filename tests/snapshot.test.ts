@@ -89,24 +89,32 @@ describe('snapshot export + import round-trip', () => {
     }
   });
 
-  it('refuses to overwrite a non-empty .kairo/ unless force', async () => {
-    const srcRoot = await mkdtemp(join(tmpdir(), 'kairo-snap-src-'));
-    const tgtRoot = await mkdtemp(join(tmpdir(), 'kairo-snap-tgt-'));
-    try {
-      await seedProject(srcRoot);
-      await seedProject(tgtRoot);
-      const exp = await exportSnapshot(srcRoot, {
-        now: () => new Date('2026-05-21T00:00:00.000Z'),
-      });
-      await expect(importSnapshot(tgtRoot, exp.path)).rejects.toThrow(/Refusing to import/);
-      // With force: succeeds.
-      const r = await importSnapshot(tgtRoot, exp.path, { force: true });
-      expect(r.ingested.events).toBeGreaterThan(0);
-    } finally {
-      await rm(srcRoot, { recursive: true, force: true });
-      await rm(tgtRoot, { recursive: true, force: true });
-    }
-  });
+  // Heaviest snapshot test: two full seeds + one export + two imports.
+  // Default 5s flakes on Windows + Node 22 CI runners (v1.1.1 dogfood);
+  // 20s is a deterministic ceiling, not a delay.
+  const HEAVY_TIMEOUT = 20_000;
+  it(
+    'refuses to overwrite a non-empty .kairo/ unless force',
+    async () => {
+      const srcRoot = await mkdtemp(join(tmpdir(), 'kairo-snap-src-'));
+      const tgtRoot = await mkdtemp(join(tmpdir(), 'kairo-snap-tgt-'));
+      try {
+        await seedProject(srcRoot);
+        await seedProject(tgtRoot);
+        const exp = await exportSnapshot(srcRoot, {
+          now: () => new Date('2026-05-21T00:00:00.000Z'),
+        });
+        await expect(importSnapshot(tgtRoot, exp.path)).rejects.toThrow(/Refusing to import/);
+        // With force: succeeds.
+        const r = await importSnapshot(tgtRoot, exp.path, { force: true });
+        expect(r.ingested.events).toBeGreaterThan(0);
+      } finally {
+        await rm(srcRoot, { recursive: true, force: true });
+        await rm(tgtRoot, { recursive: true, force: true });
+      }
+    },
+    HEAVY_TIMEOUT,
+  );
 
   it('rejects an unsupported snapshotSchema', async () => {
     const tgtRoot = await mkdtemp(join(tmpdir(), 'kairo-snap-tgt-'));
