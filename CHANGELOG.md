@@ -6,6 +6,25 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-21
+
+Single-line packaging fix caught by first downstream install.
+
+### Fixed
+
+- **`npm install github:sandy001-kki/Kairo#v1.0.x` now ships a working
+  `dist/`.** Added `"prepare": "npm run build"` to `package.json` so
+  installs from a git ref run the TypeScript build automatically. Before
+  this, the package shipped without `dist/index.js`, and downstream
+  consumers (Claude Code, MCP hosts, anything wiring up `kairo-mcp` from
+  git) hit `Error: Cannot find module '.../dist/index.js'`. No other
+  code changed.
+
+### Notes
+
+- No surface changes. Stability registry untouched. 182/182 tests pass.
+- This is the recommended baseline for the first wave of v1.x adopters.
+
 ## [1.0.0] - 2026-05-21
 
 **Stable production release.**
@@ -781,7 +800,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...v1.0.0
 [1.0.0-rc1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...v1.0.0-rc1
 [0.9.4]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...v0.9.4
