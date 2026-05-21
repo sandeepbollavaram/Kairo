@@ -4,6 +4,8 @@
 > Local-first. Deterministic. Replay-safe.
 
 [![ci](https://github.com/sandy001-kki/Kairo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sandy001-kki/Kairo/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/kairo-mcp.svg?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/kairo-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/kairo-mcp.svg?color=cb3837)](https://www.npmjs.com/package/kairo-mcp)
 [![Latest release](https://img.shields.io/github/v/release/sandy001-kki/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandy001-kki/Kairo/releases)
 [![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](tests)
 [![ADRs](https://img.shields.io/badge/ADRs-17-informational)](docs/adr)

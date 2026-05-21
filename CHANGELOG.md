@@ -6,6 +6,34 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-05-21
+
+Docs-only patch. v1.3.0 published `kairo-mcp` to npm; v1.3.1 reflects
+that in the README badge row so visitors see the published version
+and download count at a glance.
+
+### Added
+
+- **README badge row** gains two real, dynamic shields:
+  - `[![npm](.../npm/v/kairo-mcp)](npmjs.com/package/kairo-mcp)` —
+    latest published version, pulled live from the npm registry.
+  - `[![npm downloads](.../npm/dm/kairo-mcp)]` — monthly download
+    count.
+  Both are dynamic; both will tick upward (or sideways) on their own
+  as downstream users `npm install` the package.
+
+### Notes
+
+- **No code changes. No schema changes. No MCP contract changes. No
+  CLI behaviour changes. No stability registry changes.** Pure docs.
+- Tag `v1.3.1` is shipped to GitHub for completeness, but **a re-
+  publish to npm is NOT required** — npm's badge endpoint serves the
+  latest version regardless of repo tags, and the published tarball
+  for `kairo-mcp@1.3.0` is unchanged.
+- A separate `npm publish` for `1.3.1` is optional. If desired, run
+  `npm publish` per PUBLISHING.md — but the README badges work
+  whether or not you do.
+
 ## [1.3.0] - 2026-05-21
 
 **npm distribution.** Kairo becomes installable like a real developer
@@ -1091,7 +1119,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/sandy001-kki/Kairo/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...v1.1.3
