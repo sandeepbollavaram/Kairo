@@ -11,7 +11,14 @@ export type StabilityTier = 'stable' | 'experimental' | 'internal' | 'deprecated
 
 export interface StabilityEntry {
   /** Surface kind for grouping in docs. */
-  surface: 'mcp-tool' | 'mcp-prompt' | 'mcp-resource' | 'inspect-route' | 'schema' | 'snapshot';
+  surface:
+    | 'mcp-tool'
+    | 'mcp-prompt'
+    | 'mcp-resource'
+    | 'inspect-route'
+    | 'schema'
+    | 'snapshot'
+    | 'cli-command';
   /** Identifier within that surface (tool name, route path, etc.). */
   id: string;
   tier: StabilityTier;
@@ -109,6 +116,28 @@ export const STABILITY: readonly StabilityEntry[] = [
 
   // ── Snapshot format ───────────────────────────────────────────────────
   { surface: 'snapshot', id: 'snapshotSchema:1', tier: 'stable', since: '0.9.2' },
+
+  // ── CLI commands (v1.1.0, ADR-0016) — experimental until v1.2.0 ──────
+  ...cliCommands('1.1.0', [
+    'init',
+    'status',
+    'brief',
+    'continue',
+    'sessions',
+    'checkpoints',
+    'graph',
+    'search',
+    'inspect',
+    'serve',
+    'snapshot',
+    'compact',
+    'benchmark',
+    'doctor',
+    'stability',
+    'plugins',
+    'completion',
+    'version',
+  ]),
 ];
 
 function stableTools(since: string, names: string[]): StabilityEntry[] {
@@ -123,6 +152,15 @@ function experimentalTool(since: string, id: string, note?: string): StabilityEn
 
 function stableRoutes(since: string, paths: string[]): StabilityEntry[] {
   return paths.map((id) => ({ surface: 'inspect-route', id, tier: 'stable', since }));
+}
+
+function cliCommands(since: string, names: string[]): StabilityEntry[] {
+  return names.map((id) => ({
+    surface: 'cli-command' as const,
+    id,
+    tier: 'experimental' as const,
+    since,
+  }));
 }
 
 /** Lookup by `id` across surfaces; returns the first match (ids are unique today). */

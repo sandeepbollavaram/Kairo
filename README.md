@@ -1,380 +1,621 @@
 # Kairo
 
-> The persistent engineering memory and session-continuity control layer for AI coding agents.
+> Persistent engineering memory and session-continuity for AI coding agents.
+> Local-first. Deterministic. Replay-safe.
 
-Kairo is a production-grade [Model Context Protocol](https://modelcontextprotocol.io) (MCP)
-server that sits between AI coding agents (Claude Code, Codex, Cursor, Gemini CLI, …) and
-your repository. It gives those agents something they fundamentally lack: **durable memory
-and safe continuity across sessions.**
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-193%20passing-green)](#)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-AI coding agents forget. They rescan repositories, lose architectural understanding, hit
-context limits mid-task, and stop without a clean handoff. Kairo is the layer that
-remembers — a senior engineer supervising the work, forcing safe checkpoints, and handing
-the next agent an exact continuation brief instead of a blank slate.
+Kairo sits between AI coding agents — Claude Code, Cursor, Codex, Gemini CLI —
+and your repository. It is the layer that _remembers_: a senior engineer's
+notebook the agent reads at the start of every session and writes to throughout.
+
+It does not run agents. It does not call a model. It runs **next to** the
+agent, on your machine, and gives it the durable memory a model cannot keep
+on its own.
+
+```
+your repo ──▶ AI agent ──▶ Kairo (MCP) ──▶ .kairo/ on local disk
+                  ▲                          │
+                  └──── continuation brief ◀─┘
+                       (resume, don't rescan)
+```
 
 ---
 
-## Status
+## 10-second pitch
 
-**v1.0.0 — Stable production release.** Kairo's cognition architecture,
-storage guarantees, and integration boundaries are stable and trustworthy.
-Anything marked `stable` in
-[`src/contracts/stability.ts`](src/contracts/stability.ts) — 33 MCP tools,
-1 prompt, 2 resources, 14 inspect routes, 7 schemas, and the snapshot
-format — stays callable with the same shape across every v1.x release.
-6 tools (`kairo_benchmark`, `kairo_perf_report`, `kairo_compact_memory`,
-`kairo_index_status`, `kairo_plugins_list`, `kairo_stability_of`) remain
-experimental and may evolve in minor versions. See
-[API_STABILITY](docs/API_STABILITY.md),
-[V1_READINESS](docs/V1_READINESS.md),
-[RELEASE_AUDIT_v1.0.0-rc1](docs/RELEASE_AUDIT_v1.0.0-rc1.md), and
-[DOGFOOD_v1.0.0-rc1](docs/DOGFOOD_v1.0.0-rc1.md).
+AI coding agents forget. Kairo remembers — durably, deterministically, locally.
 
-> v1.0.0 does **not** mean "feature-complete forever". It means: the
-> contract is stable. The five "What Kairo IS NOT" boundaries below
-> remain load-bearing — anything in those categories is a v2.x
-> conversation, not a v1.x backlog item.
+## 1-minute pitch
 
-**v0.9.4 — Extensibility, surface stability, SDK ergonomics & MCP
-compatibility.** Final slice of v0.9.x stabilization before v1.0.0. Adds
-**API stability tiers** (`stable` / `experimental` / `internal` /
-`deprecated`) for every documented surface — MCP tools, prompts, resources,
-inspect routes, schemas, snapshot format — in
-[`src/contracts/stability.ts`](src/contracts/stability.ts); 33 tools become
-stable, 6 stay experimental. **Plugin manifest contract** (ADR-0015):
-manifest-only, no in-process JS execution — plugins are external MCP servers
-the host loads via its own config; Kairo provides discovery + zod validation
+Every new agent session starts by re-deriving the repo: which files exist,
+which framework, what the entry points are. That's wasteful, slow, and
+context-window-hostile. Mid-task the agent runs out of context and stops
+without a clean handoff. The next agent starts from zero.
 
-- semver compatibility checks via `kairo_plugins_list`. **SDK**
-  (`kairo-mcp/sdk`): small, read-only, dependency-light client for build
-  scripts and editor extensions that reads `.kairo/` directly via the same
-  projections the inspector uses. **MCP compatibility tests** assert tool
-  surface, schema shape, and that bad input never kills the stdio transport.
-  Five new docs:
-  [API_STABILITY](docs/API_STABILITY.md),
-  [PLUGIN_API](docs/PLUGIN_API.md),
-  [SDK](docs/SDK.md),
-  [MCP_COMPATIBILITY](docs/MCP_COMPATIBILITY.md),
-  [V1_READINESS](docs/V1_READINESS.md). See
-  [ADR-0015](docs/adr/0015-api-stability-and-plugins.md).
+Kairo records what happens during a session (file changes, decisions, errors,
+risk assessments), writes durable checkpoints, and hands the next session an
+exact continuation brief — _"here's what was being done, here's where it
+stopped, here are the files to look at first"_. Same project, next agent,
+no rescan.
 
-**v0.9.3 — Scale, performance & storage efficiency.** Third slice of v0.9.x
-stabilization (advanced prototype → durable infrastructure). Adds a
-deterministic benchmark harness (`kairo_benchmark` + `kairo_perf_report`)
-exercising cold/warm scan, graph render, brief generation, snapshot export,
-and inspect projections — wall-clock timings are relative, not absolute, so
-the harness is a regression-detection tool, not an absolute benchmark.
-**Per-chunk incremental indexing** in `MemoryEngine` reuses unchanged
-vectors via `sha256(chunk.text)`: dogfood shows 75% reuse when only the
-checkpoint task changes, deterministic chunk order preserved. **Memory
-compaction** (`kairo_compact_memory`, dry-run by default) archives — never
-deletes — events from ended sessions older than `olderThanDays` (default
-90), lineage-protected so any event referenced by an existing checkpoint
-stays; archive at `.kairo/archive/events-{ts}.jsonl` with manifest at
-`.kairo/archive/MANIFEST.md`. New `kairo_index_status` exposes vector index
-counters. See [PERFORMANCE.md](docs/PERFORMANCE.md) and
-[ADR-0014](docs/adr/0014-scale-and-performance.md).
+## 5-minute pitch — how it works
 
-**v0.9.2 — Snapshot/import/export & failure-injection testing.** Second
-slice of v0.9.x stabilization. Portable single-file snapshots
-(`.kairo/snapshots/snapshot-{ts}.json`) capture the full `.kairo/` state —
-events, telemetry, audit, sessions, checkpoints, continuations, graphs,
-intelligence, vector index — with a canonical-JSON `contentSha256` so two
-exports of the same `.kairo/` are byte-identical-by-hash. Import refuses
-to overwrite a non-empty `.kairo/` unless `force: true`; records pass
-through redaction and v0.9.1 migrations on the way in. Two new MCP tools
-(`kairo_snapshot_export`, `kairo_snapshot_import`). `FaultInjector` +
-`FaultInjectingAdapter` (`src/storage/faultAdapter.ts`) wrap any
-`StorageAdapter` for deterministic in-process error-path testing —
-test-only by convention. See [SNAPSHOTS.md](docs/SNAPSHOTS.md) and
-[ADR-0013](docs/adr/0013-snapshots-and-failure-injection.md).
+| Layer                   | What it does                                                   | Where it lives                        |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------- |
+| **MCP server**          | 41 tools the agent calls during work.                          | stdio, launched by your MCP host.     |
+| **Session ledger**      | Append-only log of events, decisions, errors.                  | `.kairo/events.jsonl`                 |
+| **Checkpoints**         | Durable, sanitized, resumable snapshots.                       | `.kairo/checkpoints/*.json`           |
+| **Continuation briefs** | Markdown handoffs in three size modes.                         | `.kairo/continuations/*.md`           |
+| **Repo intelligence**   | Cached fingerprint + framework/language/entry-point detection. | `.kairo/intelligence/latest.json`     |
+| **Vector memory**       | Architecture-aware hybrid recall (deterministic by default).   | `.kairo/vector/index.json`            |
+| **Graphs**              | Mermaid module / service / architecture diagrams.              | `.kairo/graphs/*.md`                  |
+| **Inspect surfaces**    | Read-only HTTP + VS Code views.                                | `kairo inspect`, `extensions/vscode/` |
 
-**v0.9.1 — Schema versioning, formal contracts & corruption quarantine.**
-First slice of v0.9.x stabilization (advanced prototype → durable
-infrastructure). Every persisted artefact (`KairoEvent`, `TelemetryEvent`,
-`AuditEntry`, `SessionState`, `Checkpoint`, `RepoIntelligence`, `VectorIndex`)
-now carries an explicit `schema` field; constants are centralised in
-[`src/contracts/schemas.ts`](src/contracts/schemas.ts). Reads validate at the
-storage-adapter seam via zod (permissive on unknowns, strict on the required
-shape) and run through a pure per-artefact migration registry so legacy
-records — and future schema bumps — read identically. Corrupt or invalid
-JSONL lines are quarantined to `.kairo/quarantine/{file}.jsonl` (with line
-number + reason + raw contents); the torn-trailing-line crash-safety contract
-is preserved. `kairo-inspect` surfaces quarantine count on the overview. See
-[SCHEMA.md](docs/SCHEMA.md) and
-[ADR-0012](docs/adr/0012-schema-versioning.md).
+Every persisted artefact carries a schema version. Reads validate at the
+storage seam; corrupt lines go to `.kairo/quarantine/`; migrations are pure
+functions. The full architecture sits in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**v0.9.0 — Developer surfaces & operational inspection.** Two surfaces, both
-**read-only projections** over local `.kairo/` (ADR-0011): a zero-dep local web
-inspector (`kairo-inspect` binary, loopback only, no JS, no remote assets, CSP
-locked, deterministic HTML) and a VS Code extension under
-[`extensions/vscode/`](extensions/vscode/) with activity-bar tree views
-(Overview / Sessions / Checkpoints / Active leases / Risk escalations) that
-auto-refresh on `.kairo/` changes. Cursor is documentation-only — it speaks
-MCP, so the existing `kairo-mcp` binary is all it needs. Backend cognition +
-coordination state remains the source of truth; no surface writes. Explicitly
-out of scope (by design, not deferred): cloud sync, accounts, remote
-telemetry, hosted backend, live collaboration. See
-[SURFACES.md](docs/SURFACES.md) and
-[ADR-0011](docs/adr/0011-developer-surfaces.md).
+---
 
-**v0.8.2 — Token efficiency as a core architecture principle.** The opposite
-failure mode of repeated rescans is a memory layer that bloats every prompt.
-Continuation briefs now have three modes — **`tiny`** (1500 chars: task / stop
-point / top-5 changed files / next 3 actions / critical warnings), **`normal`**
-(default, 4000 chars, full structure but trimmed), **`deep`** (20000 chars,
-opt-in). `kairo_graph` returns a 1-line summary + mirror path by default
-(`includeFull: true` to inline Mermaid). `kairo_memory_search` caps at 5 results
-with 120-char `why` previews. Analytics / team / risk reports write to
-`.kairo/reports/` and the MCP response is a 1–2 line pointer. New `kairo_brief`
-tool gives on-demand briefs in a chosen mode/budget. Dogfood: same checkpoint —
-tiny 632 chars (15% of deep), normal 2946 chars (71%), deep 4146 chars. Honest
-scope: budgets are character counts (deterministic, tokeniser-agnostic local
-proxy), not real tokens. See [TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and
-[ADR-0010](docs/adr/0010-token-efficiency.md).
+## Why AI coding breaks at scale (the honest version)
 
-**v0.8.1 — Deterministic engineering introspection.** Read-only query layer over
-the existing event / telemetry / audit logs and checkpoint files — pure
-deterministic projections, **no new state**. Tools: `kairo_query_events`,
-`kairo_timeline_query`, `kairo_checkpoint_lineage`, `kairo_conflict_history`,
-`kairo_retrieval_trace`. Namespace-safe (worker-private memory stays isolated;
-coordination-class telemetry is team-visible by design — it carries no private
-content). Replay-identical; historical, not real-time.
+| Failure mode                            | Why it happens                                | What Kairo does about it                                                            |
+| --------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Rescan every session**                | Agents have no durable scratch space.         | `kairo_session_start` returns cached `RepoIntelligence` + prior continuation brief. |
+| **Hit context window mid-task**         | Long sessions exceed any model's window.      | Pressure model + `CHECKPOINT_NOW` directive → safe handoff before crash.            |
+| **Repeat past mistakes**                | Agents don't remember last week's decisions.  | Decisions, errors, risk assessments persisted to event log.                         |
+| **Lose architectural understanding**    | Agent re-derives layout from scratch.         | Pre-computed module + service + architecture graphs available on read.              |
+| **No-context handoff between agents**   | Switching from Claude to Cursor = start over. | Continuation brief works for any MCP-speaking agent.                                |
+| **Cross-worker conflicts**              | Two devs/agents touching the same module.     | Cooperative file leases (`kairo_lease`) — explainable, no consensus needed.         |
+| **Token cost of "remember everything"** | Naive memory layers bloat every prompt.       | Brief modes: `tiny` (1500 chars), `normal` (4000), `deep` (20000).                  |
 
-**v0.8.0 — Enterprise telemetry, analytics & team coordination.** Engineering
-intelligence _infrastructure_ — not a dashboard. A local, redacted, append-only
-telemetry log + a pure deterministic analytics projection over telemetry + the
-event/audit logs. Privacy-first defaults: no network, no external analytics, opt-in
-export only; namespace-safe (team reports name namespaces, never their private
-contents). Three reports written to `.kairo/reports/` and five MCP tools
-(`kairo_telemetry_status` / `_analytics_summary` / `_team_activity` /
-`_risk_report` / `_module_activity`). Honestly the _local foundation_, not yet
-"enterprise-ready".
+Kairo is **cooperative**, not omniscient. It cannot force an agent to stop.
+It makes losing context expensive and safe handoff cheap. That is achievable
+and genuinely valuable — and we would rather document the limit than oversell.
 
-**v0.7.1 — Cross-worker memory freshness.** The v0.7.0 caveat is fixed: the vector
-index now also keys on a deterministic `memoryFingerprint` (hash of the built chunk
-set), so a decision/checkpoint/worker change invalidates stale cross-worker memory
-automatically — chunks rebuild cheaply offline, only the embed step is skipped on a
-true match. `kairo_memory_refresh` is idempotent; checkpoint memory is shared while
-private reasoning stays worker-isolated. Deterministic, offline-safe, namespace-safe.
-
-**v0.7.0 — Coordinated cognition & distributed engineering memory.** Multiple AI
-workers share coherent continuity over one event-sourced ledger — not autonomous
-agents. Cooperative leases (`kairo_lease`) over task/path/module scopes with
-explainable, deterministic conflict resolution; memory namespaces isolate each
-worker's session memory while shared architecture stays common; a distributed
-checkpoint graph (`kairo_timeline`) gives a coherent engineering timeline. Honest
-scope: cooperative file-based coordination on a shared/synced `.kairo/`, **not**
-network consensus.
-
-**v0.6.1 — Embedding provider layer.** The embedder is now pluggable
-(`KAIRO_EMBEDDER=openai|voyage|ollama|custom`) via one OpenAI/Ollama-compatible HTTP
-provider — but `deterministic` stays the default (offline, byte-stable) and a remote
-failure falls back to it. Similarity is one of **eight** weighted factors (added an
-explicit `architectureLayer`); a stronger embedder strengthens recall **without**
-overriding deterministic architectural correctness (dogfood: top-5 first-party 5/5 in
-both arms).
-
-**v0.6.0 — Vector / semantic memory.** Architecture-aware hybrid recall, **not**
-naive RAG. Kairo builds memory chunks (structural / semantic / session / decision /
-operational) from artifacts it already derives, embeds them with a **deterministic
-local** embedder (pluggable; honestly lexical/structural, not deep-semantic), and
-ranks retrieval by a hybrid of similarity **+ salience + graph centrality + runtime
-layer + recency + checkpoint overlap** — so a central module beats a lexically
-similar example. The index is fingerprint-keyed (no re-embed on a cache hit) and
-every continuation brief auto-carries a "Semantic architecture recall" section so the
-next agent resumes without rescanning. Tools: `kairo_memory_search` /
-`kairo_memory_index` / `kairo_memory_digest`.
-
-**v0.5.0 — Flow / graph engine.** Add Kairo to a repo and you immediately get
-Mermaid graphs from its intelligence: a **module dependency graph** (real import
-edges, collapsed to readable directory granularity and node-capped), plus derived
-**service**, **architecture**, and **pipeline** graphs. `kairo_graph` returns them on
-demand; mirrors are written to `.kairo/graphs/*.md` on every scan. Import extraction
-is honest about scope (static JS/TS + Python, internal edges only).
-
-**v0.4.0 — GitHub engine (advisory).** Kairo turns its session memory into a
-Conventional-Commits message, a Keep-a-Changelog fragment, and a release plan
-(semver bump + tag + notes), and reads git state read-only. By deliberate design
-([ADR-0003](docs/adr/0003-advisory-github-engine.md)) it **never** runs
-`git add/commit/tag/push` — Kairo proposes, you dispose. The unique value is
-memory-informed proposals (they reflect the decisions and risk Kairo recorded), not
-automation.
-
-**v0.3.0 — Risk Engine + conservatism that scales with pressure.** Kairo now
-classifies the _engineering_ risk of changes (sensitive paths, deletions,
-secret-adjacency, unresolved-error breadth) and combines it with context-loss
-pressure in a guardrail: `kairo_assess` returns `ALLOW` / `CAUTION` / `HOLD`, and the
-same change escalates to `HOLD` as the session degrades. `kairo_record` gained
-`compaction` and `clarification` signals; checkpoints carry the risk assessment into
-the continuation brief.
-
-**v0.2.0 — Repository Intelligence.** Kairo scans a repo once, fingerprints its
-structure + dependencies, and reuses that cached understanding on every resume so
-agents stop re-deriving the codebase. `kairo_session_start` returns a compact repo
-summary (frameworks, languages, entry points); `kairo_repo_scan` / `kairo_repo_intel`
-expose it directly. Ordinary in-file edits do not bust the cache (the session ledger
-tracks those); dependency/structure changes do.
-
-**v0.1.0 — Core continuity slice.** The heart of Kairo:
-
-- A production MCP server (stdio transport, official SDK, strict TypeScript).
-- An **event-sourced storage engine** — append-only log + derived snapshots + markdown
-  mirrors. Crash-safe and replayable.
-- A **session-tracking ledger** — task, changed files, decisions, commands, errors, retries.
-- A **checkpoint engine** — durable, resumable, sanitized snapshots.
-- A **continuation-prompt engine** — generates the exact brief the next agent should start from.
-- A **secret-redaction boundary** — nothing reaches disk un-sanitized.
-- A **cooperative session-pressure model** — see the honest design note below.
-
-Repository intelligence, the GitHub engine, flow graphs, and multi-agent coordination are
-on the roadmap (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
-
-## An honest note on "detecting 90% context remaining"
-
-An MCP server is a separate process. **It cannot observe the agent's token usage or context
-window** — no such API exists, and Kairo has no visibility into it. Any tool claiming
-otherwise is guessing.
-
-Kairo's continuity model is therefore **cooperative**, not magical:
-
-- The agent is instructed (via the `kairo_continuity` MCP prompt and the tool descriptions)
-  to report cheap signals it _does_ know through `kairo_heartbeat` and `kairo_record`.
-- Kairo maintains the durable ledger and computes a **risk-of-context-loss score** from
-  observed signals (tool-call volume, cumulative tracked diff size, retry/error loops,
-  repeated re-reads of the same files, elapsed time).
-- When that score crosses a threshold, Kairo's tool responses return a
-  `CHECKPOINT_NOW` directive and make safe continuation the path of least resistance.
-
-Kairo cannot _force_ an agent to stop. It makes losing context expensive and safe handoff
-cheap. That is achievable and genuinely valuable — and we would rather document the limit
-than oversell it.
+---
 
 ## What Kairo is NOT
 
-Five boundaries we put on the front page so they aren't buried in an ADR:
+Five boundaries on the front page so they aren't buried in an ADR:
 
 1. **Not distributed consensus.** Coordination is cooperative-on-shared-storage
-   (file leases over a shared `.kairo/`), not Paxos/Raft. Two workers don't
-   agree via network — they observe the same event log
-   ([ADR-0002](docs/adr/0002-cooperative-session-pressure.md)).
+   (file leases over `.kairo/`), not Paxos/Raft.
 2. **Not SaaS.** No accounts, no hosted backend, no remote telemetry. `.kairo/`
-   lives on the local filesystem
-   ([ADR-0011](docs/adr/0011-developer-surfaces.md) §6).
-3. **Not autonomous AGI orchestration.** Kairo is the memory and continuity
-   layer for AI agents. The agent decides; Kairo records and advises.
-   `kairo_assess` returns `ALLOW` / `CAUTION` / `HOLD` — never blocks
-   ([ADR-0002](docs/adr/0002-cooperative-session-pressure.md)).
+   lives on the local filesystem.
+3. **Not autonomous AGI orchestration.** Kairo is memory + continuity. The
+   agent decides; Kairo records and advises.
 4. **Not guaranteed semantic truth.** Vector recall is hybrid + salience-ranked;
-   the deterministic default is honestly lexical/structural, not deep-semantic.
-   A configured remote embedder strengthens recall _without_ overriding
-   deterministic architectural correctness
-   ([ADR-0006](docs/adr/0006-vector-semantic-memory.md)).
-5. **Not real-time collaborative editing.** Kairo is historical inspection +
-   cooperative coordination, not Google-Docs presence. No streams, no push,
-   no live cursors ([ADR-0011](docs/adr/0011-developer-surfaces.md) §6).
+   the deterministic default is honestly lexical/structural.
+5. **Not real-time collaborative editing.** No streams, no push, no live
+   cursors. Historical inspection + cooperative coordination.
 
-These are out of scope **by design, not deferred**. Anything in those
-categories is a v2.x conversation, not a v1.x backlog item.
+Out of scope **by design**, not deferred.
 
 ---
 
-## Quick start
+## Quick start (60 seconds)
+
+In any project:
 
 ```bash
-npm install
-npm run build
+# 1. Install
+npm install github:sandy001-kki/Kairo#v1.1.0
+
+# 2. Wire it into your MCP host (Claude Code, Cursor, etc.)
+npx kairo init
+
+# 3. Verify
+npx kairo doctor
 ```
 
-Register Kairo with an MCP-capable agent. Example (Claude Code `mcp` config):
+You should see:
 
-```json
-{
-  "mcpServers": {
-    "kairo": {
-      "command": "node",
-      "args": ["/absolute/path/to/Kairo/dist/index.js"],
-      "env": { "KAIRO_PROJECT_ROOT": "/absolute/path/to/your/project" }
-    }
-  }
-}
+```
+Doctor
+  ok  project root           /your/project
+  ok  kairo-mcp installed    ./node_modules/kairo-mcp/dist/index.js
+  ok  .mcp.json wires kairo  ./.mcp.json
+  !!  .kairo/ present        (none yet — first MCP session creates it)
+  ok  quarantine empty       clean
+  ok  version match          installed=1.1.0 cli=1.1.0
+
+next: 1 check(s) need attention.
 ```
 
-Kairo writes its memory to `.kairo/` inside the target project. It is git-ignored by
-default; commit it deliberately if you want shared team memory.
+(The `.kairo/` warning is expected — the first agent session creates it.)
 
-### The agent workflow Kairo expects
+Open Claude Code in the project, run `/mcp`, you'll see `kairo · connected`.
+Then say _"start a Kairo session and help me with X."_
 
-1. `kairo_session_start` — Kairo returns any existing continuation brief so the agent
-   does **not** rescan the repo.
-2. Work normally; call `kairo_record` for file changes / decisions / errors and
-   `kairo_heartbeat` periodically.
-3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
-4. `kairo_session_end` writes the final checkpoint and continuation brief.
+---
 
-## MCP surface (v0.9.4)
-
-| Tool                        | Purpose                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `kairo_session_start`       | Begin/resume; returns prior brief + cached repo intelligence                    |
-| `kairo_session_status`      | Current ledger summary + pressure + directive                                   |
-| `kairo_record`              | Log a file change / decision / command / error / retry / note                   |
-| `kairo_heartbeat`           | Cheap pulse; returns pressure + directive                                       |
-| `kairo_checkpoint`          | Create a durable, sanitized, resumable checkpoint                               |
-| `kairo_continuation`        | Fetch the latest continuation brief for the next agent                          |
-| `kairo_session_end`         | Finalize the session with a closing checkpoint                                  |
-| `kairo_repo_scan`           | Cached repo intelligence; `force` to rescan                                     |
-| `kairo_repo_intel`          | Cached repo intelligence summary (no scan)                                      |
-| `kairo_assess`              | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD)            |
-| `kairo_git_status`          | Read-only git context (branch, ahead/behind, tag, recent commits)               |
-| `kairo_commit_message`      | Conventional-Commits message from session memory (no commit)                    |
-| `kairo_changelog`           | Keep-a-Changelog fragment from the session (no file edit)                       |
-| `kairo_release_plan`        | Semver bump + tag + release notes proposal (no tag/push)                        |
-| `kairo_graph`               | Mermaid module/service/architecture/pipeline graph (no rescan)                  |
-| `kairo_memory_search`       | Hybrid explainable semantic recall (use instead of rescanning)                  |
-| `kairo_memory_index`        | Build/refresh memory; fingerprint-keyed, no re-embed on hit                     |
-| `kairo_memory_refresh`      | Ensure shared memory is current; idempotent, namespace-safe                     |
-| `kairo_memory_digest`       | Compressed salience-ordered architecture memory                                 |
-| `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)                      |
-| `kairo_coordination_status` | Active workers, held leases, ownership                                          |
-| `kairo_timeline`            | Distributed checkpoint graph (engineering timeline, Mermaid)                    |
-| `kairo_telemetry_status`    | Local telemetry status (no network; opt-in export flag)                         |
-| `kairo_analytics_summary`   | Deterministic analytics + write 3 reports to `.kairo/reports/`                  |
-| `kairo_team_activity`       | Worker activity, lease conflicts, namespace counts                              |
-| `kairo_risk_report`         | Risk escalations and highest-risk modules                                       |
-| `kairo_module_activity`     | Touches/risk by module group                                                    |
-| `kairo_query_events`        | Deterministic filter over event/telemetry/audit streams (v0.8.1)                |
-| `kairo_timeline_query`      | Per-concern historical timeline view                                            |
-| `kairo_checkpoint_lineage`  | DAG path for a checkpoint (root → target, cross-worker)                         |
-| `kairo_conflict_history`    | Every denied lease with its conflicting holder                                  |
-| `kairo_retrieval_trace`     | Causal context for a retrieval event                                            |
-| `kairo_brief`               | On-demand continuation brief in `tiny`/`normal`/`deep` mode (v0.8.2)            |
-| `kairo_snapshot_export`     | Export `.kairo/` to a single JSON snapshot file (v0.9.2)                        |
-| `kairo_snapshot_import`     | Import a snapshot into a target project root (v0.9.2)                           |
-| `kairo_benchmark`           | Run the deterministic benchmark suite; writes PERFORMANCE.md (v0.9.3)           |
-| `kairo_perf_report`         | Path + summary of the latest PERFORMANCE.md report (v0.9.3)                     |
-| `kairo_compact_memory`      | Archive (never delete) events from old ended sessions; dry-run default (v0.9.3) |
-| `kairo_index_status`        | Compact vector-index status (chunks, embedder, fingerprints) (v0.9.3)           |
-| `kairo_plugins_list`        | List validated plugin manifests; nothing executed in-process (v0.9.4)           |
-| `kairo_stability_of`        | Lookup the stability tier of any documented Kairo surface (v0.9.4)              |
-
-Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
-Prompt: `kairo_continuity` (the cooperation contract for agents).
-
-## Development
+## Real workflow
 
 ```bash
-npm run typecheck
-npm run lint
-npm test
-npm run build
+$ cd flexdee-monorepo
+$ npx kairo init
+Initialised
+  .mcp.json:   written
+  .gitignore:  appended
+
+next: open Claude Code in this project, then run /mcp — kairo should be connected.
+
+# ── Day 1: open Claude Code, work for an hour, end the session ────────
+$ npx kairo status
+Project
+  root              S:\projects\flexdee-monorepo
+  events            47
+  telemetry         12
+  sessions          1
+  checkpoints       2
+  quarantine        0
+  latest session    01JD8VK7HQM…
+  latest checkpoint 01JD8WPCXNE…
+
+Intelligence
+  schema     v4
+  files      842
+  frameworks express, nextjs, prisma
+  languages  TypeScript, JavaScript, SQL
+
+# ── Day 2: see exactly what the next agent will resume from ───────────
+$ npx kairo brief --tiny
+# Kairo Continuation Brief (tiny)
+
+- **Task:** wire idempotent payment retries
+- **Stop point:** session-end · risk HIGH · pressure CONTINUE
+- **Files changed:** 3 — top: src/payment/charge.ts, src/payment/retry.ts
+- **Next:**
+  1. Resolve the 1 unresolved error(s) before new feature work.
+  1. Re-validate high-risk changes before proceeding: src/payment/charge.ts.
+- **Critical warnings:**
+  - ⚠️ integration test flakes on retry path
+
+# ── Inspect everything in your browser ────────────────────────────────
+$ npx kairo inspect
+ready http://127.0.0.1:4173
+  project: S:\projects\flexdee-monorepo
+  read-only · no network · Ctrl+C to stop
 ```
+
+---
+
+## Token reduction example
+
+Same checkpoint, three modes — measured on Kairo's own repo:
+
+| Mode               | Chars | % of `deep` | Use when                           |
+| ------------------ | ----: | ----------: | ---------------------------------- |
+| `tiny`             |   632 |         15% | Pre-empt rescans on cheap startup. |
+| `normal` (default) | 2,946 |         71% | Resumes / checkpoints.             |
+| `deep`             | 4,146 |        100% | Explicit historical review.        |
+
+```bash
+$ npx kairo brief --tiny    # 632 chars
+$ npx kairo brief           # 2946 chars (normal)
+$ npx kairo brief --deep    # 4146 chars
+$ npx kairo brief --max-chars 1000  # exactly 1000 chars, truncated cleanly
+```
+
+Truncation is preservation-aware: critical sections (task, stop point, top
+changed files, next actions, warnings) are front-loaded so tail clipping
+keeps the load-bearing content.
+
+---
+
+## Continuation example
+
+After a session ends, Kairo writes a markdown brief. The next agent reads it
+on `kairo_session_start` instead of re-deriving the repo:
+
+```markdown
+# Kairo Continuation Brief
+
+> Resume from this brief. Do **not** rescan the whole repository —
+> inspect only the files listed below unless they prove insufficient.
+
+- **Generated:** 2026-05-21T14:30:00.000Z
+- **Checkpoint:** `01JD8WPCXNEPC0G7N4DXKDKMG6` (manual)
+- **Context-loss pressure:** 0.21 → CONTINUE
+
+## Task
+
+wire idempotent payment retries
+
+## Engineering risk at checkpoint
+
+**HIGH** (score 0.6875).
+
+- [HIGH] src/payment/charge.ts (modified) is in a high-risk area
+
+## Files changed this session — inspect these first
+
+| File                    | Change   | Risk | Touches |
+| ----------------------- | -------- | ---- | ------- |
+| `src/payment/charge.ts` | modified | HIGH | 3       |
+| `src/payment/retry.ts`  | created  | HIGH | 1       |
+
+## Key decisions
+
+- **Idempotency via request UUID** — prevents double-charges on retry.
+
+## Recommended next actions
+
+1. Resolve the 1 unresolved error(s) before new feature work.
+1. Re-validate high-risk changes before proceeding: src/payment/charge.ts.
+
+## Semantic architecture recall
+
+- **checkpoint 01JD8WPCXN…** (session, score 3.119) — salience 0.86, similarity 0.59
+- **src/payment** (structural, score 1.71) — runtimeLayer 1, dependencyProximity 0.83
+```
+
+---
+
+## Graph example
+
+```bash
+$ npx kairo graph module
+```
+
+```mermaid
+flowchart TD
+  api[src/api] --> payment[src/payment]
+  api --> auth[src/auth]
+  payment --> shared[src/shared]
+  auth --> shared
+  payment --> db[(prisma)]
+```
+
+The same file lives at `.kairo/graphs/module.md` — `kairo inspect` renders it
+in the browser via its Mermaid source.
+
+---
+
+## Snapshot / recovery example
+
+```bash
+# Archive the current state as one portable JSON file:
+$ npx kairo snapshot export
+  path:        S:\...\flexdee\.kairo\snapshots\snapshot-2026-05-21....json
+  bytes:       187,206
+  sha256:      df54fa6c84b2a91f3...
+  events:      47
+  checkpoints: 2
+  sessions:    1
+
+# Move it to another machine, then:
+$ npx kairo snapshot import ./snapshot.json
+  target:        /new/machine/path
+  events:        47
+  sessions:      1
+  checkpoints:   2
+  continuations: 2
+```
+
+Snapshots are content-hashed: two exports of the same `.kairo/` produce
+byte-identical files. Use for backups, sharing with teammates for triage,
+or moving engineering memory between machines.
+
+---
+
+## Multi-agent coordination example
+
+When two agents share a `.kairo/`, cooperative leases keep them from
+stepping on each other:
+
+```jsonc
+// agent A
+{ "name": "kairo_lease", "arguments": {
+    "action": "acquire", "scopeKind": "path", "scope": "src/payment"
+}}
+// → { "granted": true, "reason": "Lease granted on path:\"src/payment\"" }
+
+// agent B (1 minute later)
+{ "name": "kairo_lease", "arguments": {
+    "action": "acquire", "scopeKind": "path", "scope": "src/payment"
+}}
+// → { "granted": false, "conflict": {...}, "reason":
+//      "Scope path:\"src/payment\" is leased by worker \"agent-A\" until …
+//       Coordinate or wait — Kairo advises, it does not preempt." }
+```
+
+This is **cooperative**, not consensus. Two agents on a shared filesystem
+observe the same event log and agree to back off. No network protocol, no
+master. The same model also keeps cross-worker semantic memory namespace-
+isolated (one agent's private chunks don't leak to another).
+
+---
+
+## VS Code integration
+
+A separate publishable extension under
+[`extensions/vscode/`](extensions/vscode/). Activity-bar tree views for:
+
+- Overview (counts)
+- Sessions (newest first)
+- Checkpoints (click → opens the continuation brief)
+- Active leases
+- Risk escalations
+
+Reads `.kairo/` directly via `fs` — does **not** spawn the MCP server.
+Auto-refreshes on changes via `vscode.workspace.createFileSystemWatcher`.
+
+```bash
+# Build the extension locally
+cd extensions/vscode
+npm install && npm run build
+# then F5 in VS Code to "Run Extension"
+```
+
+> _(Cursor: same extension works — Cursor is a VS Code fork.)_
+
+---
+
+## Inspect surface
+
+Browser-based read-only inspector. Zero JS, no remote assets, CSP
+`default-src 'none'`. Useful for triage, debugging, demos.
+
+```bash
+$ npx kairo inspect
+ready http://127.0.0.1:4173
+```
+
+Routes: `/`, `/sessions`, `/sessions/:id`, `/checkpoints`,
+`/checkpoints/:id`, `/continuations/:name`, `/timeline`, `/graphs`,
+`/graphs/:kind`, `/memory`, `/coordination`, `/risk`, `/events`,
+`/retrieval/:id`.
+
+Bind defaults to `127.0.0.1` — loopback only. `--host 0.0.0.0` is allowed
+but **not** recommended.
+
+---
+
+## Architecture (overview)
+
+```
+        ┌─────────────────────────────────────────────┐
+        │            AI coding agent                   │
+        │   (Claude Code · Cursor · Codex · …)         │
+        └──────────────────┬───────────────────────────┘
+                           │ MCP (stdio)
+        ┌──────────────────▼───────────────────────────┐
+        │              Kairo MCP server                 │
+        │  41 tools · prompts · resources              │
+        └──────────────────┬───────────────────────────┘
+                           │
+        ┌──────────────────▼───────────────────────────┐
+        │      Session / risk / pressure / memory      │
+        │  · Reducer (events → state)                  │
+        │  · Risk engine                               │
+        │  · Pressure model                            │
+        │  · Vector memory (hybrid recall)             │
+        │  · Coordination (cooperative leases)         │
+        └──────────────────┬───────────────────────────┘
+                           │
+        ┌──────────────────▼───────────────────────────┐
+        │   Redaction boundary  (write-side)           │
+        │   Validation + migration  (read-side)        │
+        └──────────────────┬───────────────────────────┘
+                           │
+        ┌──────────────────▼───────────────────────────┐
+        │     `.kairo/`  (local, append-only, durable) │
+        │   events · sessions · checkpoints ·          │
+        │   continuations · intelligence · graphs ·    │
+        │   vector · reports · audit · telemetry       │
+        └──────────────────────────────────────────────┘
+```
+
+10 core design principles (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)):
+
+1. Cooperative, not omniscient.
+2. Event-sourced truth.
+3. Redaction is a boundary.
+4. Local-first.
+5. Seams over implementations.
+6. Token efficiency.
+7. Surfaces are projections.
+8. Schemas are versioned; migrations are pure.
+9. Scale is measured, not assumed.
+10. Integration boundaries are explicit.
+
+---
+
+## CLI reference
+
+```
+kairo init           Wire Kairo into the current project (.mcp.json + .gitignore).
+kairo status         One-screen overview of the project's .kairo/ state.
+kairo brief          Print the latest continuation brief.  [--tiny|--normal|--deep|--max-chars N]
+kairo continue       Alias for `brief --normal`.
+kairo sessions [id]  List sessions, or show one.
+kairo checkpoints [id]  List checkpoints, or show one with lineage.
+kairo graph [kind]   List graphs, or print one (Mermaid).
+kairo search "..."   Semantic memory search.
+kairo inspect        Launch the local web inspector on 127.0.0.1:4173.
+kairo serve          Run the MCP server on stdio.
+kairo snapshot export [path]      Export .kairo/ → single JSON.
+kairo snapshot import <path>      Import a snapshot into the current project.
+kairo compact [--dry-run] [--days N]   Archive stale events.
+kairo benchmark [--iterations N]  Run the deterministic benchmark suite.
+kairo doctor         Health-check the project's Kairo install.
+kairo stability [id] Lookup the stability tier of any documented surface.
+kairo plugins        List plugin manifests under .kairo/plugins/.
+kairo completion bash|zsh|pwsh    Print a shell-completion script.
+kairo version        Print kairo version.
+```
+
+Every command honours `--json`, `--quiet`, `--verbose`, `--no-color`,
+`--project PATH`, and `--help`.
+
+---
+
+## MCP surface (v1.1.0)
+
+41 tools total — 33 stable + 6 experimental. The full list:
+
+| Group                                      | Tools                                                                                           |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| **Continuity loop** (stable, v0.1)         | `session_start` `session_status` `record` `heartbeat` `checkpoint` `continuation` `session_end` |
+| **Repository intelligence** (stable, v0.2) | `repo_scan` `repo_intel`                                                                        |
+| **Risk** (stable, v0.3)                    | `assess`                                                                                        |
+| **GitHub-flavoured** (stable, v0.4)        | `git_status` `commit_message` `changelog` `release_plan`                                        |
+| **Graphs** (stable, v0.5)                  | `graph`                                                                                         |
+| **Memory** (stable, v0.6+)                 | `memory_search` `memory_index` `memory_digest` `memory_refresh`                                 |
+| **Coordination** (stable, v0.7)            | `lease` `coordination_status` `timeline`                                                        |
+| **Telemetry / analytics** (stable, v0.8)   | `telemetry_status` `analytics_summary` `team_activity` `risk_report` `module_activity`          |
+| **Query** (stable, v0.8.1)                 | `query_events` `timeline_query` `checkpoint_lineage` `conflict_history` `retrieval_trace`       |
+| **Briefs** (stable, v0.8.2)                | `brief`                                                                                         |
+| **Snapshots** (stable, v0.9.2)             | `snapshot_export` `snapshot_import`                                                             |
+| **Experimental** (v0.9.3 / v0.9.4)         | `benchmark` `perf_report` `compact_memory` `index_status` `plugins_list` `stability_of`         |
+
+All tools are prefixed `kairo_` over the wire. See
+[`docs/API_STABILITY.md`](docs/API_STABILITY.md) for the policy and
+[`src/contracts/stability.ts`](src/contracts/stability.ts) for the registry.
+
+---
+
+## Stability guarantees
+
+Anything tagged `stable` in
+[`src/contracts/stability.ts`](src/contracts/stability.ts) stays callable
+with the same shape on every v1.x release. Patch versions never bump a
+schema. Minor versions may add tools (back-compat) but not remove or
+rename stable ones without a one-minor deprecation cycle.
+
+Programmatic access:
+
+```ts
+// SDK
+import { KairoClient } from 'kairo-mcp/sdk';
+const k = new KairoClient();
+k.stabilityOf('kairo_session_start'); // → { tier: 'stable', since: '0.1.0', ... }
+```
+
+```bash
+# CLI
+$ kairo stability kairo_session_start
+  id:       kairo_session_start
+  surface:  mcp-tool
+  tier:     stable
+  since:    0.1.0
+```
+
+---
+
+## FAQ
+
+**Q: Where does my data live?**
+`/path/to/your/project/.kairo/`. Nothing leaves the machine. No network
+egress in core paths.
+
+**Q: Do I need to run a server?**
+No. The MCP host (Claude Code, Cursor) launches `kairo-mcp` per session
+over stdio. Idle = no process.
+
+**Q: Should I commit `.kairo/`?**
+Default: no — `kairo init` gitignores it. If your team wants shared
+engineering memory, leave it tracked; cooperative leases handle conflicts.
+For lighter sharing, use `kairo snapshot export` to ship a single JSON.
+
+**Q: How do I share state with a teammate?**
+
+```bash
+$ kairo snapshot export ./for-alice.json
+$ # send for-alice.json
+$ # on Alice's machine:
+$ kairo snapshot import ./for-alice.json --force
+```
+
+Records pass through redaction on the way in.
+
+**Q: How do I reset?**
+
+```bash
+rm -rf .kairo/
+```
+
+No external state to clean.
+
+**Q: Will it slow down my agent?**
+No. Every MCP tool is O(milliseconds) on a typical project. Cold scan is
+~6 ms on a small repo, warm scan is sub-millisecond.
+`kairo benchmark` measures it.
+
+**Q: What if the event log gets corrupted?**
+`readValidatedJsonl` quarantines the bad line to `.kairo/quarantine/`
+and continues. Healthy events still load. `kairo doctor` surfaces
+quarantine count.
+
+**Q: What models work with Kairo?**
+Any MCP-speaking agent. Claude Code, Cursor, Claude Desktop, Codex (via
+its MCP support), Gemini CLI (where supported). The MCP server itself
+calls no LLM.
+
+**Q: What's the licence?**
+MIT. See [`LICENSE`](LICENSE).
+
+---
+
+## Roadmap (post-v1.1.0)
+
+Honest list — no marketing, no AGI:
+
+- **v1.x minors:** HTTP/SSE transport (the seam is in place via
+  `createServer()`); promotion of validated experimental tools to stable;
+  Cursor-specific integration docs if the field needs them.
+- **v1.x patches:** bug fixes, ergonomic polish, doc improvements.
+- **v2.0.0 (no timeline):** if and only if a stable surface needs to
+  change shape. We expect months between major versions.
+
+Explicitly **not on the roadmap**:
+
+- A SaaS / hosted version. Out of scope by design (ADR-0011).
+- Autonomous-agent orchestration. The agent decides; Kairo records.
+- Real-time collaborative editing.
+
+---
 
 ## Contributing
 
-This project is open-source for visibility, but **external pull requests are not currently
-accepted**. Issues and suggestions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+1. Fork, branch, work in small slices.
+2. Every PR must pass `npm run typecheck`, `npm run lint`,
+   `npm run format:check`, `npm test`, `npm run build`.
+3. Adding a stable surface? Add it to
+   [`src/contracts/stability.ts`](src/contracts/stability.ts).
+4. Schema bumps require a migration in the same PR (ADR-0012).
+5. New ADRs go under `docs/adr/`; numbering is sequential.
+6. Honest scope and replay-safety are non-negotiable. If a change cannot
+   be made deterministic, it requires an ADR.
 
-## License
+---
 
-[MIT](LICENSE)
+## Documentation
+
+| Document                                                               | Purpose                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                         | Design + 10 core principles + roadmap.                 |
+| [`docs/API_STABILITY.md`](docs/API_STABILITY.md)                       | Stability tiers + deprecation policy.                  |
+| [`docs/SCHEMA.md`](docs/SCHEMA.md)                                     | Persisted-artefact schemas + migrations.               |
+| [`docs/SDK.md`](docs/SDK.md)                                           | Local read-only client.                                |
+| [`docs/PLUGIN_API.md`](docs/PLUGIN_API.md)                             | Plugin manifest contract.                              |
+| [`docs/MCP_COMPATIBILITY.md`](docs/MCP_COMPATIBILITY.md)               | What Kairo promises about MCP.                         |
+| [`docs/SURFACES.md`](docs/SURFACES.md)                                 | Inspect + VS Code + Cursor.                            |
+| [`docs/TOKEN_EFFICIENCY.md`](docs/TOKEN_EFFICIENCY.md)                 | Brief budgets + compact responses.                     |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)                           | Benchmark harness + incremental indexing + compaction. |
+| [`docs/V1_READINESS.md`](docs/V1_READINESS.md)                         | v1.0.0 entry criteria + compatibility matrix.          |
+| [`docs/RELEASE_AUDIT_v1.0.0-rc1.md`](docs/RELEASE_AUDIT_v1.0.0-rc1.md) | Final pre-v1 audit.                                    |
+| [`docs/DOGFOOD_v1.0.0-rc1.md`](docs/DOGFOOD_v1.0.0-rc1.md)             | The operational dogfood cycle.                         |
+| `docs/adr/*.md`                                                        | 16 architecture decision records.                      |
+
+---
+
+## Licence
+
+[MIT](LICENSE).

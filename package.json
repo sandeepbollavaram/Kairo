@@ -1,6 +1,6 @@
 {
   "name": "kairo-mcp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Kairo — a persistent engineering memory and session-continuity control layer for AI coding agents, exposed over the Model Context Protocol.",
   "license": "MIT",
   "author": "Kairo maintainers",
@@ -17,6 +17,7 @@
     "node": ">=20"
   },
   "bin": {
+    "kairo": "dist/cli/cli.js",
     "kairo-mcp": "dist/index.js",
     "kairo-inspect": "dist/inspect/cli.js"
   },

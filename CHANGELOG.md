@@ -6,6 +6,68 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-21
+
+**`kairo` CLI surface + full README rewrite.** Developer experience —
+no new cognition, no new persisted artefacts, no schema changes.
+
+See [`docs/adr/0016-cli-surface.md`](docs/adr/0016-cli-surface.md).
+
+### Added
+
+- **`kairo` binary** with 18 subcommands (`init`, `status`, `brief`,
+  `continue`, `sessions`, `checkpoints`, `graph`, `search`, `inspect`,
+  `serve`, `snapshot`, `compact`, `benchmark`, `doctor`, `stability`,
+  `plugins`, `completion`, `version`). Every command honours global
+  flags `--json`, `--quiet`, `--verbose`, `--no-color`, `--project`,
+  `--help`, `--version`. Globals are accepted on either side of the
+  subcommand (git/docker idiom).
+- **`kairo init`** — one command to wire Kairo into any MCP host project
+  (writes `.mcp.json`, appends `.kairo/` to `.gitignore`). Idempotent.
+- **`kairo doctor`** — fast self-diagnosis with stable exit code 5 when
+  fixable issues are found. Catches the exact `dist/` install gap that
+  v1.0.1 fixed.
+- **Stable JSON output** envelope — canonical key ordering at every
+  level; error shape `{ "error": { "code": "...", "message": "..." } }`.
+  Shape is experimental until v1.2.0 — additive changes only in v1.x.
+- **Shell completion** — `kairo completion bash|zsh|pwsh` emits a
+  deterministic script generated from the subcommand registry.
+- **Stable exit codes** (0 ok / 1 unexpected / 2 misuse / 3 no-kairo / 4
+  validation / 5 doctor-fixable). Adding a code is back-compat; meaning
+  changes are major-version.
+- **`tests/cli.test.ts`** — 11 end-to-end tests over the compiled bin
+  (smoke + JSON shape + global-flag positioning + idempotency).
+- **CLI commands added to the stability registry** as `experimental` (new
+  surface kind: `cli-command`). Top-level command names are
+  back-compat from v1.1.0; `--json` shape locks in v1.2.0.
+
+### Changed
+
+- **README rewritten.** 24-section structure: hero / problem / 5-minute
+  architecture / quickstart / real workflow / token reduction /
+  continuation / graph / snapshot / multi-agent / VS Code / inspect /
+  architecture diagram / CLI reference / MCP surface / stability / FAQ /
+  roadmap / contributing / docs index / licence. Honest scope at the
+  top, "What Kairo IS NOT" preserved on the front page.
+- **`package.json` bin** now lists three binaries: `kairo`, `kairo-mcp`,
+  `kairo-inspect`. The first is the new developer-facing surface; the
+  other two are unchanged from v1.0.1.
+
+### Fixed
+
+- **CLI smoke caught a friction point on first build.** The flag parser
+  initially only accepted globals *before* the subcommand. Fixed to
+  accept them on either side — `kairo doctor --json` and
+  `kairo --json doctor` are now equivalent.
+
+### Notes
+
+- 193/193 tests pass on v1.1.0 (was 182 on v1.0.0; +11 CLI tests).
+- No new MCP tools. No new persisted artefacts. No schema bumps.
+- The CLI does **not** drive the session ledger — agent-write ops
+  (`session_start`, `record`, `checkpoint`, ...) stay behind MCP. That
+  boundary is deliberate (ADR-0016 §3).
+
 ## [1.0.1] - 2026-05-21
 
 Single-line packaging fix caught by first downstream install.
@@ -800,7 +862,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...v1.0.0
 [1.0.0-rc1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...v1.0.0-rc1
