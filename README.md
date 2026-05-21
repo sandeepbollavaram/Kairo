@@ -16,6 +16,29 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.9.4 — Extensibility, surface stability, SDK ergonomics & MCP
+compatibility.** Final slice of v0.9.x stabilization before v1.0.0. Adds
+**API stability tiers** (`stable` / `experimental` / `internal` /
+`deprecated`) for every documented surface — MCP tools, prompts, resources,
+inspect routes, schemas, snapshot format — in
+[`src/contracts/stability.ts`](src/contracts/stability.ts); 33 tools become
+stable, 6 stay experimental. **Plugin manifest contract** (ADR-0015):
+manifest-only, no in-process JS execution — plugins are external MCP servers
+the host loads via its own config; Kairo provides discovery + zod validation
+
+- semver compatibility checks via `kairo_plugins_list`. **SDK**
+  (`kairo-mcp/sdk`): small, read-only, dependency-light client for build
+  scripts and editor extensions that reads `.kairo/` directly via the same
+  projections the inspector uses. **MCP compatibility tests** assert tool
+  surface, schema shape, and that bad input never kills the stdio transport.
+  Five new docs:
+  [API_STABILITY](docs/API_STABILITY.md),
+  [PLUGIN_API](docs/PLUGIN_API.md),
+  [SDK](docs/SDK.md),
+  [MCP_COMPATIBILITY](docs/MCP_COMPATIBILITY.md),
+  [V1_READINESS](docs/V1_READINESS.md). See
+  [ADR-0015](docs/adr/0015-api-stability-and-plugins.md).
+
 **v0.9.3 — Scale, performance & storage efficiency.** Third slice of v0.9.x
 stabilization (advanced prototype → durable infrastructure). Adds a
 deterministic benchmark harness (`kairo_benchmark` + `kairo_perf_report`)
@@ -243,7 +266,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.9.3)
+## MCP surface (v0.9.4)
 
 | Tool                        | Purpose                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------- |
@@ -286,6 +309,8 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_perf_report`         | Path + summary of the latest PERFORMANCE.md report (v0.9.3)                     |
 | `kairo_compact_memory`      | Archive (never delete) events from old ended sessions; dry-run default (v0.9.3) |
 | `kairo_index_status`        | Compact vector-index status (chunks, embedder, fingerprints) (v0.9.3)           |
+| `kairo_plugins_list`        | List validated plugin manifests; nothing executed in-process (v0.9.4)           |
+| `kairo_stability_of`        | Lookup the stability tier of any documented Kairo surface (v0.9.4)              |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

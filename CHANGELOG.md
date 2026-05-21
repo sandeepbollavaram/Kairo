@@ -6,6 +6,61 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-05-21
+
+Final slice of v0.9.x stabilization. Locks in the integration boundaries
+v1.0.0 will promise. See [API_STABILITY.md](docs/API_STABILITY.md),
+[PLUGIN_API.md](docs/PLUGIN_API.md), [SDK.md](docs/SDK.md),
+[MCP_COMPATIBILITY.md](docs/MCP_COMPATIBILITY.md),
+[V1_READINESS.md](docs/V1_READINESS.md), and
+[ADR-0015](docs/adr/0015-api-stability-and-plugins.md).
+
+### Added
+
+- **`src/contracts/stability.ts`** — central API stability registry with four
+  tiers (`stable` / `experimental` / `internal` / `deprecated`). 33 MCP
+  tools, 1 prompt, 2 resources, 14 inspect routes, 7 schemas, and the
+  snapshot format are marked stable. 6 tools (`kairo_benchmark`,
+  `kairo_perf_report`, `kairo_compact_memory`, `kairo_index_status`,
+  `kairo_plugins_list`, `kairo_stability_of`) stay experimental.
+- **`src/plugins/`** — plugin manifest contract (`apiVersion:
+  'kairo.plugin/1'`). Zod-validated, semver-compatibility-checked, with a
+  vocabulary of declared capabilities. **Manifest-only**: no in-process
+  JS execution. Plugins are external MCP servers the host (Claude Desktop,
+  Cursor, …) loads via its own config.
+- **`src/sdk/`** — small, read-only, dependency-light local client
+  (`KairoClient`). Reads `.kairo/` directly via the same projections the
+  inspect surface uses. No MCP spawn, no network. Designed for build
+  scripts, CI checks, and editor extensions.
+- **Two new MCP tools** (experimental):
+  - `kairo_plugins_list` — list validated plugin manifests.
+  - `kairo_stability_of` — lookup the stability tier of any documented
+    surface, or dump the full registry.
+- **MCP compatibility tests** in `tests/integration.server.test.ts`:
+  assert every tool has a name + `inputSchema`, assert bad input does not
+  kill the stdio transport, assert `kairo_stability_of` returns the
+  registered tier for stable tools.
+- **Five new docs**: `docs/API_STABILITY.md`, `docs/PLUGIN_API.md`,
+  `docs/SDK.md`, `docs/MCP_COMPATIBILITY.md`, `docs/V1_READINESS.md`.
+- **`docs/V1_READINESS.md`** documents the compatibility matrix (Node,
+  MCP SDK, transports, embedders, OS, filesystem assumptions) and the
+  v1.0.0 entry criteria — all checked.
+
+### Changed
+
+- Architecture core principles list (`docs/ARCHITECTURE.md` §2) grew a
+  10th entry: **"Integration boundaries are explicit."**
+
+### Notes
+
+- **No new cognition features.** v0.9.4 is pure boundary work: stability
+  tiers, plugin discovery, SDK ergonomics, MCP compatibility assertions.
+- **Plugin contract honest scope**: declarations, not enforcement. Code
+  loading is deliberately out of scope for v0.9.4 and may come later
+  behind an opt-in flag.
+- **181/181 tests** pass, including new `tests/stability.test.ts`,
+  `tests/plugins.test.ts`, `tests/sdk.test.ts`.
+
 ## [0.9.3] - 2026-05-21
 
 Third slice of v0.9.x stabilization: scale, performance, and storage
@@ -613,7 +668,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...v0.9.1

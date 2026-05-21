@@ -10,6 +10,8 @@ import { runBenchmark } from '../perf/index.js';
 import { compact } from '../core/compaction/compactor.js';
 import { readFile } from 'node:fs/promises';
 import { kairoPaths } from '../storage/paths.js';
+import { loadPlugins } from '../plugins/loader.js';
+import { stabilityOf, STABILITY } from '../contracts/stability.js';
 
 function projectRootFrom(explicit?: string): string {
   return explicit ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd();
@@ -1279,6 +1281,82 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         );
       } catch (e) {
         return fail(e);
+      }
+    },
+  );
+
+  // ── Plugins + stability (v0.9.4, ADR-0015) ────────────────────────────
+
+  server.registerTool(
+    'kairo_plugins_list',
+    {
+      title: 'List local plugins (manifest-only)',
+      description:
+        'Read .kairo/plugins/*.json (and/or .kairo/plugins.json) and return validated ' +
+        'plugin manifests. NOTHING IS EXECUTED IN-PROCESS — plugins are external MCP ' +
+        'servers the host (Claude Desktop, Cursor, ...) loads via its own config. ' +
+        'Read-only; local-only.',
+      inputSchema: {
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const plugins = await loadPlugins(root);
+        const compatible = plugins.filter((p) => p.compatible).length;
+        return ok(
+          `Plugins: ${plugins.length} manifest(s), ${compatible} compatible, ` +
+            `${plugins.length - compatible} incompatible/invalid.`,
+          { plugins },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_stability_of',
+    {
+      title: 'API stability lookup',
+      description:
+        'Lookup the stability tier of any documented Kairo surface (MCP tool, prompt, ' +
+        'resource, inspect route, schema, snapshot) per ADR-0015. With no id, returns ' +
+        'the full registry. Read-only.',
+      inputSchema: {
+        id: z
+          .string()
+          .optional()
+          .describe('Surface identifier (e.g. "kairo_session_start"). Omit for the full registry.'),
+      },
+    },
+    ({ id }) => {
+      try {
+        if (id === undefined) {
+          return Promise.resolve(
+            ok(
+              `Stability registry: ${STABILITY.length} entries across MCP tools / ` +
+                `prompts / resources / inspect routes / schemas / snapshot.`,
+              { entries: STABILITY },
+            ),
+          );
+        }
+        const entry = stabilityOf(id);
+        if (!entry) {
+          return Promise.resolve(
+            ok(`No registered entry for "${id}". Treat as internal.`, { entry: null }),
+          );
+        }
+        return Promise.resolve(
+          ok(
+            `${entry.id}: ${entry.tier}${entry.note ? ` (${entry.note})` : ''} ` +
+              `[since ${entry.since}, ${entry.surface}]`,
+            { entry },
+          ),
+        );
+      } catch (e) {
+        return Promise.resolve(fail(e));
       }
     },
   );

@@ -792,3 +792,89 @@ lineage-protection contract.
   negatives) rather than risk losing replay-required data.
 - Compaction reduces **bytes on disk**, not cold-scan or replay time, until
   the log is large.
+
+---
+
+# v0.9.4 — Extensibility, surface stability, SDK, MCP compatibility
+
+Final stabilization slice before v1.0.0. No new cognition; pure
+integration-boundary work.
+
+## API stability registry
+
+Loaded via `kairo_stability_of` with no arguments — returns 60+ entries:
+
+- **33 stable MCP tools** (continuity loop, intelligence, risk, GitHub,
+  graph, memory, coordination, telemetry, analytics, query, brief,
+  snapshot).
+- **6 experimental MCP tools** (`kairo_benchmark`, `kairo_perf_report`,
+  `kairo_compact_memory`, `kairo_index_status`, `kairo_plugins_list`,
+  `kairo_stability_of`).
+- **1 stable prompt** (`kairo_continuity`).
+- **2 stable resources** (`kairo://session/current`, `kairo://checkpoint/latest`).
+- **14 stable inspect routes**.
+- **7 stable schemas** (events, telemetry, audit, sessions, checkpoints,
+  intelligence, vector index).
+- **1 stable snapshot format** (`snapshotSchema: 1`).
+
+`kairo_stability_of` with `id: 'kairo_session_start'` returns
+`stable [since 0.1.0, mcp-tool]` — verified against the running server.
+
+## Plugin manifest discovery
+
+`.kairo/plugins/` directory loaded by `kairo_plugins_list` returns
+validated manifests with per-entry `compatible` flag (semver range
+matched against `SERVER_VERSION`). Tested:
+
+- Valid manifest → `compatible: true`, no warning.
+- Missing required field → `compatible: false`, schema-validation
+  warning.
+- Future-targeting `kairoCompatibility` → manifest surfaced with
+  incompatibility warning, still listed.
+
+**Honest scope:** no plugin code is loaded into the Node process.
+External MCP servers declared in `mcpServer` are launched by the host
+(Claude Desktop / Cursor), not by Kairo.
+
+## SDK round-trip
+
+```ts
+const k = new KairoClient({ projectRoot });
+await k.overview(); // works without MCP
+k.stabilityOf('kairo_brief'); // → { tier: 'stable', since: '0.8.2' }
+await k.validateSnapshot(p); // → { manifest, warnings: [] }
+```
+
+The SDK does not start `kairo-mcp`. It opens `.kairo/` files directly
+via the same `InspectProjection` the web inspector renders — a parallel
+read path, not an alternative.
+
+## MCP compatibility invariants
+
+`tests/integration.server.test.ts` (new assertions in v0.9.4):
+
+- Every tool advertises `name` (string) + `inputSchema` (object).
+- A `kairo_session_start` call with empty arguments returns an error
+  result; the transport stays alive. A subsequent `tools/list` returns
+  the same tool count.
+- `kairo_stability_of` over the wire returns text containing the tier
+  name + the tool name for a stable surface.
+
+## Findings
+
+- **No regression in existing surfaces.** 181/181 tests pass; the full
+  v0.8.x/v0.9.x feature set is intact.
+- **Stability tiers are mechanical, not aspirational.** Every entry has
+  a `since` version, a surface kind, and a tier — no folklore.
+- **Plugin contract is honest about what it doesn't do.** No JS
+  execution, no sandboxing, no live capability enforcement. The
+  declarations let the host and the user decide what to trust.
+
+## Honest scope (consolidated)
+
+- Stability tiers govern allowed changes, not runtime invariants.
+- Plugin model is metadata-only; in-process code loading is a future
+  ADR's decision.
+- SDK is read-only; mutations stay in MCP.
+- v1.0.0 lifts `experimental` entries to `stable` once they're proven
+  in production use — it does not re-shape the contract.

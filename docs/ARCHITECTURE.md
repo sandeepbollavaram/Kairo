@@ -49,6 +49,15 @@ what is left, and what is risky — and it hands the next agent an exact brief.
    archives — never deletes — events from old ended sessions, lineage-protected, with
    a dry-run-first contract. See [ADR-0014](adr/0014-scale-and-performance.md) and
    [PERFORMANCE.md](PERFORMANCE.md).
+10. **Integration boundaries are explicit.** Every documented surface (MCP tools,
+    prompts, resources, inspect routes, schemas, snapshot format) carries a stability
+    tier — `stable` / `experimental` / `internal` / `deprecated`. The plugin contract
+    is metadata-only (no in-process code execution); a read-only SDK gives non-MCP
+    consumers first-class access. See
+    [ADR-0015](adr/0015-api-stability-and-plugins.md),
+    [API_STABILITY.md](API_STABILITY.md), [PLUGIN_API.md](PLUGIN_API.md),
+    [SDK.md](SDK.md), [MCP_COMPATIBILITY.md](MCP_COMPATIBILITY.md), and
+    [V1_READINESS.md](V1_READINESS.md).
 
 ## 3. Layered architecture
 
@@ -131,7 +140,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.9.0     | Developer surfaces & operational inspection (web inspector + VS Code)                                       |
 | 0.9.1     | Schema versioning, formal contracts & corruption quarantine                                                 |
 | 0.9.2     | Snapshot/import/export & failure-injection testing                                                          |
-| **0.9.3** | Scale, performance & storage efficiency (benchmarks, incremental indexing, compaction) — _this release_     |
+| 0.9.3     | Scale, performance & storage efficiency (benchmarks, incremental indexing, compaction)                      |
+| **0.9.4** | Extensibility, surface stability, SDK ergonomics & MCP compatibility — _this release_                       |
 | 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint

@@ -4,7 +4,7 @@ import { registerTools } from './registerTools.js';
 import { CONTINUITY_PROMPT_TEXT } from '../prompts/continuityPrompt.js';
 
 export const SERVER_NAME = 'kairo';
-export const SERVER_VERSION = '0.9.3';
+export const SERVER_VERSION = '0.9.4';
 
 /**
  * Builds the MCP server and binds tools, the cooperation prompt, and read-only state

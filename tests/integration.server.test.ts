@@ -95,6 +95,8 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_perf_report',
         'kairo_compact_memory',
         'kairo_index_status',
+        'kairo_plugins_list',
+        'kairo_stability_of',
       ]),
     );
   });
@@ -242,5 +244,32 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     } finally {
       await c2.close();
     }
+  });
+
+  // ── MCP compatibility (v0.9.4, ADR-0015) ─────────────────────────────
+
+  it('every advertised tool has a name + inputSchema; transport survives bad input', async () => {
+    const { tools } = await client.listTools();
+    for (const t of tools) {
+      expect(typeof t.name).toBe('string');
+      expect(typeof t.inputSchema).toBe('object');
+    }
+    // Bad input surfaces as an error result, not a transport crash.
+    const bad = await client.callTool({ name: 'kairo_session_start', arguments: {} });
+    const t = textOf(bad);
+    expect(typeof t).toBe('string');
+    // Transport is still alive — listTools() succeeds with the same count.
+    const again = await client.listTools();
+    expect(again.tools.length).toBe(tools.length);
+  });
+
+  it('kairo_stability_of returns the registered tier for a stable tool', async () => {
+    const r = await client.callTool({
+      name: 'kairo_stability_of',
+      arguments: { id: 'kairo_session_start' },
+    });
+    const text = textOf(r);
+    expect(text).toContain('stable');
+    expect(text).toContain('kairo_session_start');
   });
 });
