@@ -6,6 +6,38 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-05-21
+
+CI caught another real bug, this time on `ubuntu-latest · node 20`. The
+v1.1.2 timeout fix unblocked Windows; v1.1.3 fixes the test-file ordering
+race that was hidden until the matrix finally had room to expose it.
+
+### Fixed
+
+- **`tests/cli.test.ts` returned exit 1 instead of 2 on `ubuntu-latest ·
+  node 20`.** Root cause: `tests/cli.test.ts` assumed `dist/cli/cli.js`
+  was already built (it did `spawnSync(node, [CLI, ...])` without first
+  running the build), so it was racing against
+  `tests/integration.server.test.ts`'s `beforeAll(execSync('npm run
+  build'))`. On 5 of 6 matrix cells the Vitest parallel worker picked
+  the integration file first; on ubuntu + node 20 it picked the CLI
+  file first, the bin didn't exist, `spawnSync` returned 1 (Cannot
+  find module), and the "unknown command exits 2" assertion failed.
+
+  Fix: `tests/cli.test.ts` now has its own `beforeAll` that runs `npm
+  run build` if `dist/cli/cli.js` is missing — same pattern
+  `integration.server.test.ts` uses. Test-file order is now irrelevant.
+
+### Notes
+
+- 193/193 tests still pass. No change to MCP tools, CLI behaviour,
+  schemas, or any stable surface. Test infrastructure only — this
+  bug was always there, just deterministically masked by parallel
+  file order on every host except one.
+- This is the **second** real bug the CI matrix has caught in 24h.
+  ADR-0017's premise (cross-platform CI catches deterministic
+  regressions that local dev can't) keeps holding.
+
 ## [1.1.2] - 2026-05-21
 
 First downstream CI run caught a real Windows + Node 22 flake. Single-line
@@ -944,7 +976,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...v1.1.0

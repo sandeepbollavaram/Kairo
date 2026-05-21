@@ -1,16 +1,28 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 /**
  * v1.1.0 — `kairo` CLI surface (ADR-0016). Exercises the compiled bin
  * end-to-end. JSON-mode shape is the experimental contract we'll lock in
  * v1.2.0.
+ *
+ * v1.1.3 dogfood fix: when this test file is picked by a Vitest worker
+ * BEFORE `tests/integration.server.test.ts` builds dist/, the CLI bin is
+ * missing and every spawnSync returns exit 1 ("Cannot find module"). Build
+ * dist/ ourselves in beforeAll so test-file order is irrelevant. Same
+ * pattern integration.server.test.ts uses.
  */
 const CLI = join(process.cwd(), 'dist', 'cli', 'cli.js');
+
+beforeAll(() => {
+  if (!existsSync(CLI)) {
+    execSync('npm run build', { cwd: process.cwd(), stdio: 'ignore' });
+  }
+}, 60_000);
 
 function run(args: string[], cwd?: string): { code: number; stdout: string; stderr: string } {
   const r = spawnSync(process.execPath, [CLI, ...args], {
