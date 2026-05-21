@@ -43,6 +43,12 @@ what is left, and what is risky — and it hands the next agent an exact brief.
    not silently dropped. Patch versions never bump schemas; minor versions bump only
    when a same-release migration ships. See
    [ADR-0012](adr/0012-schema-versioning.md) and [SCHEMA.md](SCHEMA.md).
+9. **Scale is measured, not assumed.** A deterministic benchmark harness exercises the
+   hot paths (cold/warm scan, graph render, brief generation, snapshot export, inspect
+   projections); per-chunk incremental indexing reuses unchanged vectors; compaction
+   archives — never deletes — events from old ended sessions, lineage-protected, with
+   a dry-run-first contract. See [ADR-0014](adr/0014-scale-and-performance.md) and
+   [PERFORMANCE.md](PERFORMANCE.md).
 
 ## 3. Layered architecture
 
@@ -124,7 +130,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.8.2     | Token efficiency as a core architecture principle                                                           |
 | 0.9.0     | Developer surfaces & operational inspection (web inspector + VS Code)                                       |
 | 0.9.1     | Schema versioning, formal contracts & corruption quarantine                                                 |
-| **0.9.2** | Snapshot/import/export & failure-injection testing — _this release_                                         |
+| 0.9.2     | Snapshot/import/export & failure-injection testing                                                          |
+| **0.9.3** | Scale, performance & storage efficiency (benchmarks, incremental indexing, compaction) — _this release_     |
 | 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint

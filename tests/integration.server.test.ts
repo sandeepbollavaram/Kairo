@@ -91,6 +91,10 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_module_activity',
         'kairo_snapshot_export',
         'kairo_snapshot_import',
+        'kairo_benchmark',
+        'kairo_perf_report',
+        'kairo_compact_memory',
+        'kairo_index_status',
       ]),
     );
   });

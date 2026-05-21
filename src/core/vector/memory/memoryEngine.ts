@@ -8,6 +8,7 @@ import type {
   RetrievalResult,
   VectorIndex,
 } from '../types.js';
+import { createHash } from 'node:crypto';
 import type { EmbeddingProvider } from '../providers/types.js';
 import { resolveProviderFromEnv, deterministicProvider } from '../providers/registry.js';
 import { chunkRepoIntelligence, chunkSessionMemory, chunkDocs } from '../chunking/memoryChunker.js';
@@ -33,6 +34,9 @@ export interface IndexResult {
   reused: boolean;
   /** True if a configured remote provider failed and deterministic was used. */
   fellBack: boolean;
+  /** v0.9.3: per-chunk incremental indexing counters. */
+  embedded: number;
+  reusedVectors: number;
 }
 
 /**
@@ -119,10 +123,51 @@ export class MemoryEngine {
         chunks: existing.chunks.length,
         reused: true,
         fellBack: false,
+        embedded: 0,
+        reusedVectors: existing.chunks.length,
       };
     }
-    const { vectors, provider, fellBack } = await this.embedAll(chunks.map((c) => c.text));
-    const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: vectors[i]! }));
+
+    // ── v0.9.3 incremental indexing ──────────────────────────────────────
+    // Build a lookup of existing vectors keyed by text-hash. Reuse vectors
+    // for any chunk whose text matches an existing chunk; only embed the
+    // ones that don't. Deterministic chunk ordering is preserved.
+    const reusable =
+      existing &&
+      existing.schema === 3 &&
+      existing.embedderId === this.primary.id &&
+      existing.fingerprint === inputs.intel.fingerprint
+        ? indexByTextHash(existing.chunks)
+        : new Map<string, number[]>();
+
+    const toEmbed: { i: number; text: string }[] = [];
+    const reusedVectors: (number[] | undefined)[] = Array.from({ length: chunks.length });
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i]!;
+      const hash = textHash(c.text);
+      const v = reusable.get(hash);
+      if (v) reusedVectors[i] = v;
+      else toEmbed.push({ i, text: c.text });
+    }
+
+    let fellBack = false;
+    let provider = this.primary;
+    const finalVectors: number[][] = Array.from({ length: chunks.length }, () => []);
+    if (toEmbed.length === 0) {
+      provider = this.primary;
+    } else {
+      const r = await this.embedAll(toEmbed.map((t) => t.text));
+      provider = r.provider;
+      fellBack = r.fellBack;
+      for (let k = 0; k < toEmbed.length; k++) {
+        finalVectors[toEmbed[k]!.i] = r.vectors[k]!;
+      }
+    }
+    for (let i = 0; i < chunks.length; i++) {
+      if (reusedVectors[i]) finalVectors[i] = reusedVectors[i]!;
+    }
+
+    const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: finalVectors[i]! }));
     const idx: VectorIndex = {
       schema: 3,
       fingerprint: inputs.intel.fingerprint,
@@ -133,9 +178,13 @@ export class MemoryEngine {
       chunks: embedded,
     };
     await this.adapter.saveVectorIndex(idx);
+    const embeddedCount = toEmbed.length;
+    const reusedCount = chunks.length - embeddedCount;
     logger.info('Vector memory indexed', {
       chunks: embedded.length,
       embedder: provider.id,
+      embedded: embeddedCount,
+      reused: reusedCount,
       fellBack,
     });
     return {
@@ -145,6 +194,8 @@ export class MemoryEngine {
       chunks: embedded.length,
       reused: false,
       fellBack,
+      embedded: embeddedCount,
+      reusedVectors: reusedCount,
     };
   }
 
@@ -178,10 +229,37 @@ export class MemoryEngine {
     return idx ? architectureDigest(idx.chunks) : undefined;
   }
 
-  async stats(): Promise<{ chunks: number; embedderId: string; fingerprint: string } | undefined> {
+  async stats(): Promise<
+    | {
+        chunks: number;
+        embedderId: string;
+        fingerprint: string;
+        memoryFingerprint: string;
+        dim: number;
+      }
+    | undefined
+  > {
     const idx = await this.loadValid();
     return idx
-      ? { chunks: idx.chunks.length, embedderId: idx.embedderId, fingerprint: idx.fingerprint }
+      ? {
+          chunks: idx.chunks.length,
+          embedderId: idx.embedderId,
+          fingerprint: idx.fingerprint,
+          memoryFingerprint: idx.memoryFingerprint,
+          dim: idx.dim,
+        }
       : undefined;
   }
+}
+
+function textHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function indexByTextHash(chunks: EmbeddedChunk[]): Map<string, number[]> {
+  const m = new Map<string, number[]>();
+  for (const c of chunks) {
+    if (!m.has(textHash(c.text))) m.set(textHash(c.text), c.vector);
+  }
+  return m;
 }

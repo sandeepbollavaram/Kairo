@@ -6,6 +6,52 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-05-21
+
+Third slice of v0.9.x stabilization: scale, performance, and storage
+efficiency. See [PERFORMANCE.md](docs/PERFORMANCE.md) and
+[ADR-0014](docs/adr/0014-scale-and-performance.md).
+
+### Added
+
+- **`src/perf/`** — deterministic benchmark harness over the hot paths
+  (cold/warm scan, graph render, brief generation in `tiny`/`normal`/`deep`
+  modes, snapshot export, inspect projection). Reports `min / median / p95 /
+  max` plus scenario counters; writes `.kairo/reports/PERFORMANCE.md`.
+- **`src/core/compaction/`** — `compact(projectRoot, opts)` archives events
+  from ended sessions older than `olderThanDays` (default 90), lineage-
+  protected. Dry-run by default. Archive at `.kairo/archive/events-{ts}.jsonl`
+  with manifest at `.kairo/archive/MANIFEST.md`. NEVER deletes; an atomic
+  temp-then-rename keeps the live log intact on crash.
+- **Per-chunk incremental vector indexing** in `MemoryEngine.index()`. When
+  the top-level `memoryFingerprint` misses, the rebuild looks up each new
+  chunk by `sha256(text)` against the existing index; vectors for unchanged
+  chunks are reused. New `IndexResult` counters: `embedded`, `reusedVectors`.
+- **Four MCP tools**: `kairo_benchmark`, `kairo_perf_report`,
+  `kairo_compact_memory`, `kairo_index_status`. All respect the v0.8.2
+  compact-by-default contract — single-line MCP response, full report in
+  `.kairo/reports/`.
+
+### Changed
+
+- `MemoryEngine.stats()` now also returns `memoryFingerprint` and `dim` so
+  `kairo_index_status` can render a compact one-line summary.
+- ARCHITECTURE.md core principles gained #9: **"Scale is measured, not
+  assumed."**
+
+### Notes
+
+- Wall-clock benchmark timings depend on the host; the harness is for
+  **relative** comparison and regression detection, not absolute
+  benchmarking.
+- Compaction is **conservative by default**: false negatives ("did not
+  archive an event that could safely have been archived") are preferred
+  over false positives.
+- Honest scope: incremental indexing reduces *embed work*, not chunk-build
+  work. The chunker still runs in full (already deterministic + offline).
+- 158/158 tests pass, including three new test files: `tests/perf.test.ts`,
+  `tests/compaction.test.ts`, `tests/incrementalIndex.test.ts`.
+
 ## [0.9.2] - 2026-05-21
 
 Second slice of v0.9.x stabilization: portable snapshot/import/export and a
@@ -567,7 +613,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...v0.9.0

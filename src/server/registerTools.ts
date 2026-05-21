@@ -6,6 +6,10 @@ import { ok, fail } from './responses.js';
 import { KairoError } from '../utils/errors.js';
 import { exportSnapshot } from '../snapshot/export.js';
 import { importSnapshot } from '../snapshot/import.js';
+import { runBenchmark } from '../perf/index.js';
+import { compact } from '../core/compaction/compactor.js';
+import { readFile } from 'node:fs/promises';
+import { kairoPaths } from '../storage/paths.js';
 
 function projectRootFrom(explicit?: string): string {
   return explicit ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd();
@@ -1126,6 +1130,152 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
             contentSha256: r.contentSha256,
             manifest: r.snapshot.manifest,
           },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  // ── Performance, indexing, compaction (v0.9.3, ADR-0014) ───────────────
+
+  server.registerTool(
+    'kairo_benchmark',
+    {
+      title: 'Run benchmark suite',
+      description:
+        'Run the deterministic benchmark suite over the current project root and write ' +
+        '.kairo/reports/PERFORMANCE.md (ADR-0014). Reads-only; no mutation. Wall-clock ' +
+        'timings depend on the host — use for relative comparison and regression detection.',
+      inputSchema: {
+        iterations: z.number().int().positive().optional(),
+        scenarios: z
+          .array(z.string())
+          .optional()
+          .describe('Restrict to these scenario names; default: run all.'),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ iterations, scenarios, projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const opts: { iterations?: number; only?: string[] } = {};
+        if (iterations !== undefined) opts.iterations = iterations;
+        if (scenarios !== undefined) opts.only = scenarios;
+        const r = await runBenchmark(sessions, root, opts);
+        const fastest = [...r.report.scenarios]
+          .filter((s) => !s.skipped)
+          .sort((a, b) => a.stats.median - b.stats.median)[0];
+        const slowest = [...r.report.scenarios]
+          .filter((s) => !s.skipped)
+          .sort((a, b) => b.stats.median - a.stats.median)[0];
+        return ok(
+          `Benchmark: ${r.report.scenarios.length} scenarios, sum-of-medians ` +
+            `${r.report.totalMs.toFixed(1)}ms. ` +
+            (fastest && slowest
+              ? `fastest=${fastest.name}@${fastest.stats.median.toFixed(1)}ms ` +
+                `slowest=${slowest.name}@${slowest.stats.median.toFixed(1)}ms. `
+              : '') +
+            `Report: ${r.reportPath}`,
+          { reportPath: r.reportPath, report: r.report },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_perf_report',
+    {
+      title: 'Latest performance report',
+      description:
+        'Return the path and a short summary of the latest .kairo/reports/PERFORMANCE.md ' +
+        '(ADR-0014). Read-only.',
+      inputSchema: {
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const paths = kairoPaths(root);
+        const reportPath = `${paths.reportsDir}/PERFORMANCE.md`;
+        try {
+          const md = await readFile(reportPath, 'utf8');
+          const head = md.split('\n').slice(0, 6).join('\n');
+          return ok(`Performance report at ${reportPath}.\n\n${head}`, {
+            reportPath,
+            bytes: md.length,
+          });
+        } catch {
+          return ok(`No performance report yet. Run kairo_benchmark first.`, {
+            reportPath,
+            exists: false,
+          });
+        }
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_compact_memory',
+    {
+      title: 'Compact stale memory',
+      description:
+        'Archive events from ended sessions older than `olderThanDays` (default 90) into ' +
+        '.kairo/archive/events-{ts}.jsonl. Dry-run by default — pass dryRun=false to apply. ' +
+        'Compaction NEVER deletes; the archive manifest at .kairo/archive/MANIFEST.md records ' +
+        'every move. Lineage-protected (events referenced by existing checkpoints are kept).',
+      inputSchema: {
+        dryRun: z.boolean().optional().describe('Default true. Pass false to apply.'),
+        olderThanDays: z.number().int().positive().optional(),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ dryRun, olderThanDays, projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const opts: { dryRun?: boolean; olderThanDays?: number } = {};
+        if (dryRun !== undefined) opts.dryRun = dryRun;
+        if (olderThanDays !== undefined) opts.olderThanDays = olderThanDays;
+        const r = await compact(root, opts);
+        const verb = r.applied ? 'Applied' : 'Dry-run';
+        return ok(
+          `${verb}: ${r.plan.candidateEvents} events archivable, ` +
+            `${r.plan.retainedEvents} retained, ${r.plan.candidateSessionIds.length} sessions. ` +
+            `Report: ${r.plan.reportPath}` +
+            (r.applied ? `; archive: ${r.plan.archivePath}` : ''),
+          {
+            applied: r.applied,
+            plan: r.plan,
+          },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_index_status',
+    {
+      title: 'Vector index status',
+      description:
+        'Compact summary of the current vector index: embedder id, fingerprint, ' +
+        'memory fingerprint, chunk count, vector dimension (ADR-0014). Read-only.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const s = await sessions.memoryStats();
+        if (!s) return ok('No vector index built yet.', { built: false });
+        return ok(
+          `Index: ${s.chunks} chunks, embedder ${s.embedderId}, dim ${s.dim}. ` +
+            `repo=${s.fingerprint.slice(0, 12)}… memory=${s.memoryFingerprint.slice(0, 12)}…`,
+          { built: true, ...s },
         );
       } catch (e) {
         return fail(e);

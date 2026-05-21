@@ -730,3 +730,65 @@ and the fault-injection contract against synthetic projects.
 - Fault injection is in-process simulation, not real OS error
   exercise. It proves the handler is correct, not that the OS layer
   is correct.
+
+---
+
+# v0.9.3 — Scale, performance & storage efficiency
+
+Third slice of v0.9.x stabilization. Ran the benchmark harness on this
+repo's own `.kairo/`, exercised per-chunk incremental indexing on a
+realistic checkpoint mutation, and verified compaction's dry-run-first +
+lineage-protection contract.
+
+## Benchmark harness on Kairo's own .kairo/
+
+- `kairo_benchmark` over 5 iterations writes
+  `.kairo/reports/PERFORMANCE.md` with min/median/p95/max per scenario.
+- Scenario shape is deterministic across runs (assertion in
+  `tests/perf.test.ts`); wall-clock numbers are not (deliberately —
+  treat as relative).
+- Sum-of-medians runs in tens of milliseconds on a developer laptop for
+  this repo's size. Cold scan dominates (the rest is essentially cache
+  reads + projections).
+
+## Per-chunk incremental indexing
+
+- Seed: scan repo + index against a single session/checkpoint.
+- Mutate: change ONLY the checkpoint task (`'wire payments'` →
+  `'add idempotency keys'`).
+- Result: `embedded=1, reusedVectors=3` of 4 total chunks → **75% reuse**.
+- Invariant holds: `embedded + reusedVectors === chunks`.
+- Embedder id stamped on the index remains the provider actually used;
+  reused vectors are byte-identical to their previous values.
+
+## Memory compaction safety
+
+- Dry-run report at `.kairo/reports/COMPACTION.md` lists every session and
+  the per-session decision with a reason. No on-disk mutation observed.
+- Apply path: archive at `.kairo/archive/events-{ts}.jsonl` + manifest at
+  `.kairo/archive/MANIFEST.md`. Original `events.jsonl` rewritten temp-
+  then-rename — atomic.
+- Lineage protection verified with a fixture where the current session's
+  events were retroactively dated past the cutoff. Because a checkpoint
+  references the session, **none of its events** were archived.
+
+## Findings
+
+- **Determinism preserved across all three optimisations.** Benchmark
+  report shape is stable; incremental-index chunk ordering is unchanged;
+  compaction's apply path is atomic.
+- **No false-positive compactions.** The lineage-protection test would
+  catch any case where compaction archived an event a checkpoint still
+  references.
+- **Top-level + per-chunk reuse compose.** When the full chunk set is
+  identical, the top-level `memoryFingerprint` short-circuits (no
+  rebuild). When the set changes, per-chunk text-hash reuse minimises
+  embed work.
+
+## Honest scope
+
+- Benchmark numbers are **relative**. Don't compare across hosts.
+- Compaction is **conservative**: it prefers to keep too much (false
+  negatives) rather than risk losing replay-required data.
+- Compaction reduces **bytes on disk**, not cold-scan or replay time, until
+  the log is large.

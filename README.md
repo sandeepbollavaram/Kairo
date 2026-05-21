@@ -16,6 +16,23 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.9.3 — Scale, performance & storage efficiency.** Third slice of v0.9.x
+stabilization (advanced prototype → durable infrastructure). Adds a
+deterministic benchmark harness (`kairo_benchmark` + `kairo_perf_report`)
+exercising cold/warm scan, graph render, brief generation, snapshot export,
+and inspect projections — wall-clock timings are relative, not absolute, so
+the harness is a regression-detection tool, not an absolute benchmark.
+**Per-chunk incremental indexing** in `MemoryEngine` reuses unchanged
+vectors via `sha256(chunk.text)`: dogfood shows 75% reuse when only the
+checkpoint task changes, deterministic chunk order preserved. **Memory
+compaction** (`kairo_compact_memory`, dry-run by default) archives — never
+deletes — events from ended sessions older than `olderThanDays` (default
+90), lineage-protected so any event referenced by an existing checkpoint
+stays; archive at `.kairo/archive/events-{ts}.jsonl` with manifest at
+`.kairo/archive/MANIFEST.md`. New `kairo_index_status` exposes vector index
+counters. See [PERFORMANCE.md](docs/PERFORMANCE.md) and
+[ADR-0014](docs/adr/0014-scale-and-performance.md).
+
 **v0.9.2 — Snapshot/import/export & failure-injection testing.** Second
 slice of v0.9.x stabilization. Portable single-file snapshots
 (`.kairo/snapshots/snapshot-{ts}.json`) capture the full `.kairo/` state —
@@ -226,45 +243,49 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.9.2)
+## MCP surface (v0.9.3)
 
-| Tool                        | Purpose                                                              |
-| --------------------------- | -------------------------------------------------------------------- |
-| `kairo_session_start`       | Begin/resume; returns prior brief + cached repo intelligence         |
-| `kairo_session_status`      | Current ledger summary + pressure + directive                        |
-| `kairo_record`              | Log a file change / decision / command / error / retry / note        |
-| `kairo_heartbeat`           | Cheap pulse; returns pressure + directive                            |
-| `kairo_checkpoint`          | Create a durable, sanitized, resumable checkpoint                    |
-| `kairo_continuation`        | Fetch the latest continuation brief for the next agent               |
-| `kairo_session_end`         | Finalize the session with a closing checkpoint                       |
-| `kairo_repo_scan`           | Cached repo intelligence; `force` to rescan                          |
-| `kairo_repo_intel`          | Cached repo intelligence summary (no scan)                           |
-| `kairo_assess`              | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD) |
-| `kairo_git_status`          | Read-only git context (branch, ahead/behind, tag, recent commits)    |
-| `kairo_commit_message`      | Conventional-Commits message from session memory (no commit)         |
-| `kairo_changelog`           | Keep-a-Changelog fragment from the session (no file edit)            |
-| `kairo_release_plan`        | Semver bump + tag + release notes proposal (no tag/push)             |
-| `kairo_graph`               | Mermaid module/service/architecture/pipeline graph (no rescan)       |
-| `kairo_memory_search`       | Hybrid explainable semantic recall (use instead of rescanning)       |
-| `kairo_memory_index`        | Build/refresh memory; fingerprint-keyed, no re-embed on hit          |
-| `kairo_memory_refresh`      | Ensure shared memory is current; idempotent, namespace-safe          |
-| `kairo_memory_digest`       | Compressed salience-ordered architecture memory                      |
-| `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)           |
-| `kairo_coordination_status` | Active workers, held leases, ownership                               |
-| `kairo_timeline`            | Distributed checkpoint graph (engineering timeline, Mermaid)         |
-| `kairo_telemetry_status`    | Local telemetry status (no network; opt-in export flag)              |
-| `kairo_analytics_summary`   | Deterministic analytics + write 3 reports to `.kairo/reports/`       |
-| `kairo_team_activity`       | Worker activity, lease conflicts, namespace counts                   |
-| `kairo_risk_report`         | Risk escalations and highest-risk modules                            |
-| `kairo_module_activity`     | Touches/risk by module group                                         |
-| `kairo_query_events`        | Deterministic filter over event/telemetry/audit streams (v0.8.1)     |
-| `kairo_timeline_query`      | Per-concern historical timeline view                                 |
-| `kairo_checkpoint_lineage`  | DAG path for a checkpoint (root → target, cross-worker)              |
-| `kairo_conflict_history`    | Every denied lease with its conflicting holder                       |
-| `kairo_retrieval_trace`     | Causal context for a retrieval event                                 |
-| `kairo_brief`               | On-demand continuation brief in `tiny`/`normal`/`deep` mode (v0.8.2) |
-| `kairo_snapshot_export`     | Export `.kairo/` to a single JSON snapshot file (v0.9.2)             |
-| `kairo_snapshot_import`     | Import a snapshot into a target project root (v0.9.2)                |
+| Tool                        | Purpose                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `kairo_session_start`       | Begin/resume; returns prior brief + cached repo intelligence                    |
+| `kairo_session_status`      | Current ledger summary + pressure + directive                                   |
+| `kairo_record`              | Log a file change / decision / command / error / retry / note                   |
+| `kairo_heartbeat`           | Cheap pulse; returns pressure + directive                                       |
+| `kairo_checkpoint`          | Create a durable, sanitized, resumable checkpoint                               |
+| `kairo_continuation`        | Fetch the latest continuation brief for the next agent                          |
+| `kairo_session_end`         | Finalize the session with a closing checkpoint                                  |
+| `kairo_repo_scan`           | Cached repo intelligence; `force` to rescan                                     |
+| `kairo_repo_intel`          | Cached repo intelligence summary (no scan)                                      |
+| `kairo_assess`              | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD)            |
+| `kairo_git_status`          | Read-only git context (branch, ahead/behind, tag, recent commits)               |
+| `kairo_commit_message`      | Conventional-Commits message from session memory (no commit)                    |
+| `kairo_changelog`           | Keep-a-Changelog fragment from the session (no file edit)                       |
+| `kairo_release_plan`        | Semver bump + tag + release notes proposal (no tag/push)                        |
+| `kairo_graph`               | Mermaid module/service/architecture/pipeline graph (no rescan)                  |
+| `kairo_memory_search`       | Hybrid explainable semantic recall (use instead of rescanning)                  |
+| `kairo_memory_index`        | Build/refresh memory; fingerprint-keyed, no re-embed on hit                     |
+| `kairo_memory_refresh`      | Ensure shared memory is current; idempotent, namespace-safe                     |
+| `kairo_memory_digest`       | Compressed salience-ordered architecture memory                                 |
+| `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)                      |
+| `kairo_coordination_status` | Active workers, held leases, ownership                                          |
+| `kairo_timeline`            | Distributed checkpoint graph (engineering timeline, Mermaid)                    |
+| `kairo_telemetry_status`    | Local telemetry status (no network; opt-in export flag)                         |
+| `kairo_analytics_summary`   | Deterministic analytics + write 3 reports to `.kairo/reports/`                  |
+| `kairo_team_activity`       | Worker activity, lease conflicts, namespace counts                              |
+| `kairo_risk_report`         | Risk escalations and highest-risk modules                                       |
+| `kairo_module_activity`     | Touches/risk by module group                                                    |
+| `kairo_query_events`        | Deterministic filter over event/telemetry/audit streams (v0.8.1)                |
+| `kairo_timeline_query`      | Per-concern historical timeline view                                            |
+| `kairo_checkpoint_lineage`  | DAG path for a checkpoint (root → target, cross-worker)                         |
+| `kairo_conflict_history`    | Every denied lease with its conflicting holder                                  |
+| `kairo_retrieval_trace`     | Causal context for a retrieval event                                            |
+| `kairo_brief`               | On-demand continuation brief in `tiny`/`normal`/`deep` mode (v0.8.2)            |
+| `kairo_snapshot_export`     | Export `.kairo/` to a single JSON snapshot file (v0.9.2)                        |
+| `kairo_snapshot_import`     | Import a snapshot into a target project root (v0.9.2)                           |
+| `kairo_benchmark`           | Run the deterministic benchmark suite; writes PERFORMANCE.md (v0.9.3)           |
+| `kairo_perf_report`         | Path + summary of the latest PERFORMANCE.md report (v0.9.3)                     |
+| `kairo_compact_memory`      | Archive (never delete) events from old ended sessions; dry-run default (v0.9.3) |
+| `kairo_index_status`        | Compact vector-index status (chunks, embedder, fingerprints) (v0.9.3)           |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).
