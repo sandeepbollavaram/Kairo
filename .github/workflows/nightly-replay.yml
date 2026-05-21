@@ -1,0 +1,83 @@
+name: nightly-replay
+
+# Re-run the full suite once a day to catch latent flakes and Node-minor
+# regressions, and verify snapshot determinism still holds byte-for-byte.
+# Not a release blocker — this is a tripwire, not a gate.
+
+on:
+  schedule:
+    # 06:00 UTC every day. Use cron.help to convert to your timezone.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    name: nightly replay (ubuntu · node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test (193 tests)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Snapshot round-trip determinism
+        run: |
+          set -e
+          node - <<'EOF'
+          // Pinned-clock export → export-again on a seeded project. Same
+          // .kairo/ contents must produce identical contentSha256. This is
+          // the load-bearing invariant for the snapshot stability contract.
+          import('node:fs/promises').then(async (fs) => {
+            const { tmpdir } = await import('node:os');
+            const { join } = await import('node:path');
+            const root = await fs.mkdtemp(join(tmpdir(), 'kairo-nightly-'));
+            try {
+              await fs.writeFile(join(root, 'package.json'), JSON.stringify({ name: 't' }));
+              await fs.mkdir(join(root, 'src'), { recursive: true });
+              await fs.writeFile(join(root, 'src/x.ts'), 'export const x=1;\n');
+
+              const { FileStorageAdapter } = await import('./dist/storage/fileStorageAdapter.js');
+              const { withRedaction } = await import('./dist/storage/redactingAdapter.js');
+              const { SessionManager } = await import('./dist/core/session/sessionManager.js');
+              const { systemClock } = await import('./dist/utils/time.js');
+              const { exportSnapshot } = await import('./dist/snapshot/export.js');
+
+              const a = withRedaction(new FileStorageAdapter(root), systemClock);
+              const m = new SessionManager(a, systemClock);
+              await m.init();
+              await m.startSession({ agent: 'nightly', task: 'replay', projectRoot: root });
+              await m.record({ kind: 'file', path: 'src/x.ts', changeKind: 'modified' });
+              await m.checkpoint({ reason: 'manual' });
+              await m.endSession();
+
+              const pin = () => new Date('2026-01-01T00:00:00.000Z');
+              const r1 = await exportSnapshot(root, { now: pin });
+              const r2 = await exportSnapshot(root, { now: pin });
+              if (r1.contentSha256 !== r2.contentSha256) {
+                console.error('determinism regression:');
+                console.error('  first =', r1.contentSha256);
+                console.error('  second =', r2.contentSha256);
+                process.exit(1);
+              }
+              console.log('snapshot contentSha256 stable:', r1.contentSha256);
+            } finally {
+              await fs.rm(root, { recursive: true, force: true });
+            }
+          });
+          EOF

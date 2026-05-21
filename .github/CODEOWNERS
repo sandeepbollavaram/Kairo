@@ -1,0 +1,7 @@
+# CODEOWNERS for Kairo. Adding a reviewer here is a maintenance signal —
+# it means "this person is on the hook if this part regresses".
+#
+# v1.1.1: the maintainer is the only owner across the repo. Extend this
+# file when the contributor list grows.
+
+* @sandy001-kki

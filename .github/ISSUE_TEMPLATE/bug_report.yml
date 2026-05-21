@@ -1,0 +1,93 @@
+name: Bug report
+description: Something Kairo does wrong, or stops doing.
+title: 'bug: '
+labels: ['bug', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Determinism + replay-safety are
+        non-negotiable — bug reports that mention either are
+        triaged first.
+
+  - type: input
+    id: version
+    attributes:
+      label: Kairo version
+      description: Output of `kairo --version` (or the package.json version).
+      placeholder: 1.1.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (describe in steps)
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+      placeholder: v20.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: MCP host (if relevant)
+      description: Claude Code, Cursor, Claude Desktop, "none — using SDK only", etc.
+      placeholder: Claude Code 2.1.x
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Smallest sequence of commands or tool calls that demonstrates the bug.
+      placeholder: |
+        1. `kairo init` in a fresh project
+        2. open Claude Code, run `/mcp`
+        3. observe ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Paste error messages, JSON output, stack traces verbatim.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: 'Optional: `kairo doctor --json` output'
+      description: Run `kairo doctor --json -C .` in the affected project and paste the JSON here.
+      render: json
+
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Contract impact
+      options:
+        - label: This bug affects a `stable` surface (MCP tool, inspect route, schema, snapshot).
+        - label: This bug affects determinism / replay-safety.
+        - label: This bug affects redaction or the secret boundary.

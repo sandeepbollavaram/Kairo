@@ -6,6 +6,57 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-21
+
+**Operational CI & repository polish.** No code-layer changes, no
+new MCP tools, no new persisted artefacts, no schema bumps. Pure
+infrastructure-software hardening. See
+[ADR-0017](docs/adr/0017-ci-and-repo-policy.md).
+
+### Added
+
+- **`.github/workflows/ci.yml`** — cross-platform matrix gate
+  (ubuntu / macOS / windows × Node 20 & 22 = 6 cells) running the
+  full local gate (`typecheck` → `lint` → `format:check` → `test` →
+  `build`). `fail-fast: false` so a Windows flake never masks a real
+  macOS regression.
+- **Install-smoke job** — after the matrix gate, runs `npm pack`,
+  installs the tarball into a fresh `npm init` project, and verifies
+  `dist/index.js` + `dist/cli/cli.js` ship, `kairo --version` exits 0,
+  and `kairo doctor --json` returns the documented stable shape.
+  Catches packaging regressions like the one v1.0.1 fixed.
+- **`.github/workflows/nightly-replay.yml`** — daily tripwire that
+  re-runs the full suite and asserts `exportSnapshot` produces a
+  byte-identical `contentSha256` across two consecutive runs of the
+  same `.kairo/`. Not a release blocker; surfaces latent flakes and
+  Node-minor regressions.
+- **PR template** (`.github/PULL_REQUEST_TEMPLATE.md`) with four
+  load-bearing checks: smallest user-visible change, stability
+  contract, schemas & migrations (ADR-0012), determinism &
+  replay-safety.
+- **Three issue templates** (`.github/ISSUE_TEMPLATE/*.yml`): bug
+  report (with version / OS / `kairo doctor --json` blob), feature
+  request (with honest-scope checkboxes), stability question (routed
+  to the right triage bucket).
+- **`.github/ISSUE_TEMPLATE/config.yml`** — disables blank issues;
+  routes "how does X work" questions to GitHub Discussions.
+- **`.github/CODEOWNERS`** — single-owner today; structured to grow.
+
+### Changed
+
+- **README badge row** swaps the static "tests" badge for a dynamic
+  **`ci`** badge that reads from `actions/workflows/ci.yml`. Real-time
+  green vs static claim. ADR count bumped from 16 to 17.
+
+### Notes
+
+- 193/193 tests pass on v1.1.1. Same suite the new CI matrix runs.
+- No flaky network tests, no cloud CI dependencies. CI is
+  GitHub-Actions-native and runs entirely on GitHub-hosted runners.
+- Discoverability work (repo topics, description, social preview,
+  Discussions toggle) is documented in ADR-0017 §10 but lives in
+  GitHub UI, not in the repo files.
+
 ## [1.1.0] - 2026-05-21
 
 **`kairo` CLI surface + full README rewrite.** Developer experience —
@@ -862,7 +913,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...v1.0.0

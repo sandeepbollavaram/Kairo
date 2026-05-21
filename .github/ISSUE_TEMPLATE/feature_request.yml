@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose a new feature, surface, or behaviour change.
+title: 'feat: '
+labels: ['enhancement', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kairo's scope is intentionally narrow (see "What Kairo IS NOT"
+        in the README). The questions below help us judge whether a
+        feature is in scope.
+
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use case
+      description: What problem does this solve, in your own engineering work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How would it work? New tool? New CLI command? Behaviour change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What did you try first? Why didn't existing tools (kairo_query_events, snapshot, etc.) solve it?
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Honest-scope check
+      description: Tick the ones that apply — or none.
+      options:
+        - label: Compatible with local-first / offline-safe defaults.
+        - label: Compatible with the deterministic / replay-safe contract.
+        - label: Does NOT require a hosted backend, accounts, or remote telemetry.
+        - label: Does NOT require running agents (Kairo records, the agent decides).
+
+  - type: textarea
+    id: prior
+    attributes:
+      label: Prior ADR (optional)
+      description: If this touches an existing decision (e.g. ADR-0011 surfaces, ADR-0012 schemas), link it.
