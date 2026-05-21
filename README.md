@@ -231,6 +231,33 @@ Kairo cannot _force_ an agent to stop. It makes losing context expensive and saf
 cheap. That is achievable and genuinely valuable — and we would rather document the limit
 than oversell it.
 
+## What Kairo is NOT
+
+Five boundaries we put on the front page so they aren't buried in an ADR:
+
+1. **Not distributed consensus.** Coordination is cooperative-on-shared-storage
+   (file leases over a shared `.kairo/`), not Paxos/Raft. Two workers don't
+   agree via network — they observe the same event log
+   ([ADR-0002](docs/adr/0002-cooperative-session-pressure.md)).
+2. **Not SaaS.** No accounts, no hosted backend, no remote telemetry. `.kairo/`
+   lives on the local filesystem
+   ([ADR-0011](docs/adr/0011-developer-surfaces.md) §6).
+3. **Not autonomous AGI orchestration.** Kairo is the memory and continuity
+   layer for AI agents. The agent decides; Kairo records and advises.
+   `kairo_assess` returns `ALLOW` / `CAUTION` / `HOLD` — never blocks
+   ([ADR-0002](docs/adr/0002-cooperative-session-pressure.md)).
+4. **Not guaranteed semantic truth.** Vector recall is hybrid + salience-ranked;
+   the deterministic default is honestly lexical/structural, not deep-semantic.
+   A configured remote embedder strengthens recall _without_ overriding
+   deterministic architectural correctness
+   ([ADR-0006](docs/adr/0006-vector-semantic-memory.md)).
+5. **Not real-time collaborative editing.** Kairo is historical inspection +
+   cooperative coordination, not Google-Docs presence. No streams, no push,
+   no live cursors ([ADR-0011](docs/adr/0011-developer-surfaces.md) §6).
+
+These are out of scope **by design, not deferred**. Anything in those
+categories is a v2.x conversation, not a v1.x backlog item.
+
 ---
 
 ## Quick start

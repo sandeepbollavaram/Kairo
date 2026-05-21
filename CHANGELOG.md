@@ -6,6 +6,43 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0-rc1] - 2026-05-21
+
+Release-candidate audit pass before v1.0.0. **No new features, no
+architecture changes, no subsystem additions.** Pure verification +
+small honest corrections + the explicit "What Kairo IS NOT" boundary on
+the front page.
+
+See [`docs/RELEASE_AUDIT_v1.0.0-rc1.md`](docs/RELEASE_AUDIT_v1.0.0-rc1.md)
+for the full audit. All ten audit areas (determinism, compatibility,
+recovery, token-efficiency, surface, security, performance, documentation,
+honest-scope, release-discipline) passed.
+
+### Added
+
+- `docs/RELEASE_AUDIT_v1.0.0-rc1.md` — the full audit report and the
+  recommendation: tag rc1, dogfood one cycle, cut v1.0.0 if no
+  regressions surface.
+- `README.md` — **"What Kairo is NOT"** section (5 boundaries: not
+  distributed consensus, not SaaS, not autonomous AGI orchestration,
+  not guaranteed semantic truth, not real-time collaborative editing).
+  These are out of scope **by design**, not deferred.
+
+### Changed
+
+- Version bumped to `1.0.0-rc1`. SERVER_VERSION matches.
+
+### Notes
+
+- 181/181 tests pass on this commit. Lint, typecheck, prettier, build
+  clean.
+- v1.0.0 itself will be a version bump from rc1 (no code change required)
+  after the dogfood cycle. Optionally lifts validated experimental tools
+  to stable in the same release.
+- `v1.0.0` does NOT mean "feature-complete forever". It means: Kairo's
+  cognition architecture, storage guarantees, and integration boundaries
+  are stable and trustworthy.
+
 ## [0.9.4] - 2026-05-21
 
 Final slice of v0.9.x stabilization. Locks in the integration boundaries
@@ -668,7 +705,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...HEAD
+[1.0.0-rc1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...v1.0.0-rc1
 [0.9.4]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...v0.9.2

@@ -86,7 +86,8 @@ describe('loadPlugins', () => {
           version: '0.1.0',
           description: 'ok',
           capabilities: ['read-events'],
-          kairoCompatibility: '^0.9',
+          // Cover both 0.9.x and 1.x so this test survives version bumps.
+          kairoCompatibility: '^0.9 || ^1',
         }),
       );
       await writeFile(
