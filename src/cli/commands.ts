@@ -715,16 +715,23 @@ const initCmd: CommandSpec = {
     //   2. global PATH    (kairo-mcp resolves via where/which)
     //   3. fallback npx   (works in any directory, any OS)
     const chosen = chooseMcpSpec(detect(ctx.projectRoot));
-    result.mcpInstallForm = chosen.form;
 
+    let displayForm: McpInstallForm | 'unknown';
     if (mcp.mcpServers.kairo && !force) {
       ctx.out.info(ctx.out.dim('  .mcp.json already declares kairo — pass --force to overwrite.'));
       result.mcpJson = 'skipped';
+      // v1.4.2 Bug A fix: when we skip, the on-disk form is what matters
+      // for the user — not the form we WOULD have written. Misreporting
+      // this had a user thinking init upgraded a stale local-form entry
+      // to global when it hadn't.
+      displayForm = classifyInstalledSpec(mcp.mcpServers.kairo);
     } else {
       mcp.mcpServers.kairo = chosen.spec;
       await writeFile(mcpPath, JSON.stringify(mcp, null, 2) + '\n', 'utf8');
       result.mcpJson = 'written';
+      displayForm = chosen.form;
     }
+    result.mcpInstallForm = displayForm;
 
     // 2. .gitignore
     const giPath = join(ctx.projectRoot, '.gitignore');
@@ -750,7 +757,7 @@ const initCmd: CommandSpec = {
     ctx.out.heading('Initialised');
     ctx.out.kv([
       ['.mcp.json', String(result.mcpJson)],
-      ['mcp form', renderInstallForm(ctx, chosen.form)],
+      ['mcp form', renderInstallForm(ctx, displayForm)],
       ['.gitignore', String(result.gitignore)],
       ['mcp host', host === 'none' ? ctx.out.dim('not detected') : ctx.out.green(host)],
     ]);
@@ -807,11 +814,31 @@ const doctorCmd: CommandSpec = {
     const root = ctx.projectRoot;
     const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
 
-    const pkgJson = join(root, 'package.json');
+    // v1.4.2 Bug B fix: accept any common project-root marker, not just
+    // Node's `package.json`. Python / Rust / Go / Java / Ruby / generic
+    // git checkouts all count. Previously this check emitted a false
+    // positive in any non-Node project the v1.4.0 init had just
+    // correctly wired up.
+    const projectMarkers = [
+      'package.json', // Node
+      '.git', // any git checkout
+      'pyproject.toml', // Python (PEP 518)
+      'requirements.txt', // Python (legacy)
+      'setup.py', // Python (legacy)
+      'go.mod', // Go modules
+      'Cargo.toml', // Rust
+      'pom.xml', // Java (Maven)
+      'build.gradle', // Java (Gradle)
+      'build.gradle.kts', // Java/Kotlin (Gradle KTS)
+    ];
+    const foundMarker = projectMarkers.find((m) => existsSync(join(root, m)));
     checks.push({
       name: 'project root',
-      ok: existsSync(pkgJson),
-      detail: existsSync(pkgJson) ? root : `no package.json at ${root}`,
+      ok: foundMarker !== undefined,
+      detail:
+        foundMarker !== undefined
+          ? `${root} (${foundMarker})`
+          : `no project marker at ${root} — expected one of: ${projectMarkers.join(', ')}`,
     });
 
     // v1.4.0: `kairo-mcp` can be reached three ways. Doctor accepts any
@@ -891,32 +918,57 @@ const doctorCmd: CommandSpec = {
           : `${quarantineCount} record(s) — inspect ${paths.quarantineDir}`,
     });
 
-    // Version match — consumer install OR running from inside the kairo-mcp dev repo.
+    // v1.4.2 Bug C fix: version match only makes sense for the local
+    // install form. Global / npx installs are managed by the user's
+    // package manager — there's no local node_modules/kairo-mcp/
+    // package.json to compare against, and the absence of one is NOT
+    // a problem. Previously this emitted a false positive in every
+    // non-Node project the v1.4.0 init had just correctly wired up.
     try {
-      const consumerPkg = join(root, 'node_modules', 'kairo-mcp', 'package.json');
-      const selfPkg = join(root, 'package.json');
-      let pkgPath: string | undefined;
-      if (existsSync(consumerPkg)) pkgPath = consumerPkg;
-      else if (existsSync(selfPkg)) {
-        // Only treat the project root's package.json as the kairo-mcp source of
-        // truth when it actually IS kairo-mcp (e.g. running doctor from the
-        // dev repo itself). Avoids confusing Flexdee's package.json with ours.
-        const own = JSON.parse(await readFile(selfPkg, 'utf8')) as { name?: string };
-        if (own.name === 'kairo-mcp') pkgPath = selfPkg;
-      }
-      if (!pkgPath) {
-        checks.push({
-          name: 'version match',
-          ok: false,
-          detail: 'kairo-mcp not installed in this project',
-        });
-      } else {
+      if (det.hasLocalInstall) {
+        const pkgPath = join(root, 'node_modules', 'kairo-mcp', 'package.json');
         const installed = (JSON.parse(await readFile(pkgPath, 'utf8')) as { version: string })
           .version;
         checks.push({
           name: 'version match',
           ok: installed === SERVER_VERSION,
           detail: `installed=${installed} cli=${SERVER_VERSION}`,
+        });
+      } else if (det.hasGlobalBin) {
+        // The global bin is on PATH; we trust it. The user upgrades it
+        // with `npm install -g kairo-mcp@latest` outside this check.
+        checks.push({
+          name: 'version match',
+          ok: true,
+          detail: `global install (cli=${SERVER_VERSION}); upgrade with \`npm install -g kairo-mcp@latest\``,
+        });
+      } else if (existsSync(join(root, 'dist', 'index.js'))) {
+        // Doctor is running inside the kairo-mcp dev repo itself.
+        const selfPkg = join(root, 'package.json');
+        const own = JSON.parse(await readFile(selfPkg, 'utf8')) as {
+          name?: string;
+          version?: string;
+        };
+        if (own.name === 'kairo-mcp') {
+          checks.push({
+            name: 'version match',
+            ok: own.version === SERVER_VERSION,
+            detail: `dev repo: package.json=${own.version ?? '?'} cli=${SERVER_VERSION}`,
+          });
+        } else {
+          checks.push({
+            name: 'version match',
+            ok: true,
+            detail: `npx form (cli=${SERVER_VERSION}); resolved at launch by npx`,
+          });
+        }
+      } else {
+        // Pure npx form, no local install, no global bin — the version
+        // is whatever npx fetches at launch time.
+        checks.push({
+          name: 'version match',
+          ok: true,
+          detail: `npx form (cli=${SERVER_VERSION}); resolved at launch by npx`,
         });
       }
     } catch {

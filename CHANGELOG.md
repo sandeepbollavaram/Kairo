@@ -6,6 +6,78 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-23
+
+**Cross-language doctor/init correctness.** Three honest defects in
+v1.4.0 surfaced by continuing Python-repo dogfood. All three were
+"the system works, but it lies about its state" — exactly the kind of
+small inaccuracy that erodes trust. v1.4.2 closes them. Reliability
+fix only — no MCP contract changes, no schema changes, no new tools,
+no new behaviour at runtime.
+
+### Fixed
+
+- **Bug A: `kairo init` reported the chosen form even when it skipped.**
+  When `.mcp.json` already declared `kairo`, init said `mcp form:
+  global (kairo-mcp on PATH)` while the file on disk still had the
+  stale `node ./node_modules/...` local form. The kv row now reads
+  the **actual on-disk** form via `classifyInstalledSpec`, matching
+  what `kairo doctor` reports.
+
+- **Bug B: `kairo doctor` insisted on `package.json` at the project
+  root.** Python / Rust / Go / Java / Ruby repos legitimately don't
+  have one. Doctor now accepts any of these markers:
+  `package.json`, `.git`, `pyproject.toml`, `requirements.txt`,
+  `setup.py`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`,
+  `build.gradle.kts`. The detail line names which marker matched so
+  the user knows what was found. Truly empty directories still fail
+  with an honest error listing what was expected.
+
+- **Bug C: `kairo doctor` ran the version-match check against
+  `node_modules/kairo-mcp/package.json` even when no local install
+  existed.** Global and npx installs don't have a local
+  `package.json` to compare to — and the *absence* of one was being
+  reported as a failure (`kairo-mcp not installed in this project`)
+  despite the `kairo-mcp installed` check having just confirmed the
+  global PATH install was fine. Doctor now routes per install form:
+  - `local`: compares `node_modules/kairo-mcp/package.json` ↔
+    `SERVER_VERSION` (unchanged from v1.4.0).
+  - `global`: reports OK + a hint to upgrade via `npm install -g
+    kairo-mcp@latest` (the user's package manager owns the version,
+    not doctor).
+  - `npx`: reports OK + a hint that the version is resolved at
+    launch by npx (not a local concern).
+  - Inside the kairo-mcp dev repo: compares `dist/index.js` ↔ the
+    repo's own `package.json` (unchanged).
+
+### Added
+
+- **8 new regression tests** in `tests/doctorNonNode.test.ts`
+  (213/213 total, up from 205):
+  - 5 project-marker tests: Python `pyproject.toml`, Python
+    `requirements.txt`, Rust `Cargo.toml`, Go `go.mod`, .git-only
+    git checkout. All recognised as valid project roots.
+  - 1 negative test: truly empty directory fails project root with
+    an honest error.
+  - 1 version-match test: Python project with no node_modules does
+    NOT fail version match.
+  - 1 init-stale-mcp.json regression: Python repo with the v1.0.x-
+    era broken local-form .mcp.json, after `kairo init --force`,
+    must contain one of the v1.4.0 valid forms (never the broken
+    `node ./node_modules/...`).
+
+### Notes
+
+- 213/213 tests pass.
+- Caught and fixed in real-time by a Python repo dogfood
+  (`ImageCompareSoftware`) — the same project that found Bug A in
+  v1.4.0. v1.4.2 ships the *whole truthful version* of what v1.4.0
+  intended to be.
+- The user-visible improvement is that running `kairo init` then
+  `kairo doctor` in a Python / Rust / Go repo now reports
+  `all checks passed` instead of `3 check(s) need attention` when
+  everything is in fact fine.
+
 ## [1.4.1] - 2026-05-21
 
 Maintainer GitHub username changed from `sandy001-kki` to
@@ -1254,7 +1326,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.3.0...v1.3.1
