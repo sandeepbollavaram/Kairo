@@ -1,16 +1,16 @@
 {
   "name": "kairo-mcp",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Kairo — a persistent engineering memory and session-continuity control layer for AI coding agents, exposed over the Model Context Protocol.",
   "license": "MIT",
   "author": "Kairo maintainers",
-  "homepage": "https://github.com/sandy001-kki/Kairo#readme",
+  "homepage": "https://github.com/sandeepbollavaram/Kairo#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sandy001-kki/Kairo.git"
+    "url": "git+https://github.com/sandeepbollavaram/Kairo.git"
   },
   "bugs": {
-    "url": "https://github.com/sandy001-kki/Kairo/issues"
+    "url": "https://github.com/sandeepbollavaram/Kairo/issues"
   },
   "type": "module",
   "engines": {

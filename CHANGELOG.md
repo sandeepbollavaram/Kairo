@@ -6,6 +6,56 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-21
+
+Maintainer GitHub username changed from `sandy001-kki` to
+`sandeepbollavaram`; swept stale repository links and ownership
+metadata.
+
+### Fixed
+
+- **`.github/CODEOWNERS`** — `@sandy001-kki` no longer resolves after
+  the rename (GitHub mention resolution doesn't follow username
+  redirects). Updated to `@sandeepbollavaram` so review requests route
+  correctly.
+- **`package.json`** — `homepage`, `repository.url`, `bugs.url` all
+  swept. npm package page and IDE "view source" links resolve directly
+  instead of through GitHub's redirect.
+
+### Changed
+
+- **README.md** — CI badge URL, latest-release badge URL, and the
+  bug-report link in the Troubleshooting section all point at the new
+  username.
+- **CHANGELOG.md** — every compare link (all prior version diffs) now
+  points at the new namespace. Existing tags resolve identically; the
+  URLs just no longer rely on GitHub's redirect.
+- **`PUBLISHING.md`** — install commands and the scoped-name fallback
+  example updated.
+- **`.github/ISSUE_TEMPLATE/config.yml`** — the Discussions deflection
+  link points at the new namespace.
+- **`docs/adr/0017-ci-and-repo-policy.md`** — CODEOWNERS reference in
+  the ADR text updated to match the file.
+
+### Not changed
+
+- **No MCP contract changes. No schema changes. No new tools. No
+  behavioural changes.** Pure docs / metadata.
+- **No published `kairo-mcp` tarball semantics change** — the
+  consumer-facing `dist/` is identical to v1.4.0. A republish to npm
+  is optional (the README badges and install commands work either
+  way; the metadata fields in package.json affect only the next
+  `npm view` output).
+- **The old `sandy001-kki` GitHub URLs keep working** via GitHub's
+  redirect as long as nobody claims the old username. This sweep is
+  insurance against that day, not an emergency.
+
+### Notes
+
+- 205/205 tests pass.
+- Git history retains the old maintainer email — past commits are
+  byte-identical, only the live URL metadata moved.
+
 ## [1.4.0] - 2026-05-21
 
 **Cross-language MCP bootstrap reliability.** First non-Node-project
@@ -416,7 +466,7 @@ Single-line packaging fix caught by first downstream install.
 
 ### Fixed
 
-- **`npm install github:sandy001-kki/Kairo#v1.0.x` now ships a working
+- **`npm install github:sandeepbollavaram/Kairo#v1.0.x` now ships a working
   `dist/`.** Added `"prepare": "npm run build"` to `package.json` so
   installs from a git ref run the TypeScript build automatically. Before
   this, the package shipped without `dist/index.js`, and downstream
@@ -1204,34 +1254,35 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.4.0...HEAD
-[1.4.0]: https://github.com/sandy001-kki/Kairo/compare/v1.3.1...v1.4.0
-[1.3.1]: https://github.com/sandy001-kki/Kairo/compare/v1.3.0...v1.3.1
-[1.3.0]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...v1.2.0
-[1.1.3]: https://github.com/sandy001-kki/Kairo/compare/v1.1.2...v1.1.3
-[1.1.2]: https://github.com/sandy001-kki/Kairo/compare/v1.1.1...v1.1.2
-[1.1.1]: https://github.com/sandy001-kki/Kairo/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.1...v1.1.0
-[1.0.1]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...v1.0.0
-[1.0.0-rc1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...v1.0.0-rc1
-[0.9.4]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...v0.9.4
-[0.9.3]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...v0.9.3
-[0.9.2]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...v0.9.2
-[0.9.1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...v0.9.1
-[0.9.0]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...v0.9.0
-[0.8.2]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...v0.8.2
-[0.8.1]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...v0.8.1
-[0.8.0]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...v0.8.0
-[0.7.1]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...v0.7.1
-[0.7.0]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...v0.7.0
-[0.6.1]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...v0.6.0
-[0.5.2]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...v0.5.2
-[0.5.1]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/sandy001-kki/Kairo/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.1.3...v1.2.0
+[1.1.3]: https://github.com/sandeepbollavaram/Kairo/compare/v1.1.2...v1.1.3
+[1.1.2]: https://github.com/sandeepbollavaram/Kairo/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.0.0-rc1...v1.0.0
+[1.0.0-rc1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.9.4...v1.0.0-rc1
+[0.9.4]: https://github.com/sandeepbollavaram/Kairo/compare/v0.9.3...v0.9.4
+[0.9.3]: https://github.com/sandeepbollavaram/Kairo/compare/v0.9.2...v0.9.3
+[0.9.2]: https://github.com/sandeepbollavaram/Kairo/compare/v0.9.1...v0.9.2
+[0.9.1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.8.2...v0.9.0
+[0.8.2]: https://github.com/sandeepbollavaram/Kairo/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.7.1...v0.8.0
+[0.7.1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.5.2...v0.6.0
+[0.5.2]: https://github.com/sandeepbollavaram/Kairo/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/sandeepbollavaram/Kairo/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/sandeepbollavaram/Kairo/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/sandeepbollavaram/Kairo/releases/tag/v0.1.0

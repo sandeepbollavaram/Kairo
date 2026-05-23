@@ -3,10 +3,10 @@
 > Persistent engineering memory and session-continuity for AI coding agents.
 > Local-first. Deterministic. Replay-safe.
 
-[![ci](https://github.com/sandy001-kki/Kairo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sandy001-kki/Kairo/actions/workflows/ci.yml)
+[![ci](https://github.com/sandeepbollavaram/Kairo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sandeepbollavaram/Kairo/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/kairo-mcp.svg?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/kairo-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/kairo-mcp.svg?color=cb3837)](https://www.npmjs.com/package/kairo-mcp)
-[![Latest release](https://img.shields.io/github/v/release/sandy001-kki/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandy001-kki/Kairo/releases)
+[![Latest release](https://img.shields.io/github/v/release/sandeepbollavaram/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandeepbollavaram/Kairo/releases)
 [![Tests](https://img.shields.io/badge/tests-205%20passing-brightgreen)](tests)
 [![ADRs](https://img.shields.io/badge/ADRs-18-informational)](docs/adr)
 [![MCP tools](https://img.shields.io/badge/MCP%20tools-41-blueviolet)](docs/API_STABILITY.md)
@@ -131,7 +131,7 @@ kairo doctor
 > is the MCP server, not the CLI). Once you've used npx once it's cached;
 > subsequent calls are instant.
 
-> **Want the pre-release / dev tip?** `npm install -g github:sandy001-kki/Kairo`
+> **Want the pre-release / dev tip?** `npm install -g github:sandeepbollavaram/Kairo`
 > builds from the latest commit on `main` instead of the published npm
 > version. Same `kairo` CLI; identical behaviour.
 
@@ -699,7 +699,7 @@ Replace the `kairo` entry in `.mcp.json` with:
 ### Anything else
 
 Run `kairo doctor --json` and attach the output to a
-[bug report](https://github.com/sandy001-kki/Kairo/issues/new?template=bug_report.yml).
+[bug report](https://github.com/sandeepbollavaram/Kairo/issues/new?template=bug_report.yml).
 The JSON shape is stable across v1.x; we can diagnose from the report.
 
 ---

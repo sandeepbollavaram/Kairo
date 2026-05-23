@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or design discussion
-    url: https://github.com/sandy001-kki/Kairo/discussions
+    url: https://github.com/sandeepbollavaram/Kairo/discussions
     about: 'For "how does X work" or "should we do Y" use Discussions. Bugs go to the bug report template.'

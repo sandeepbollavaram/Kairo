@@ -101,7 +101,7 @@ Issue templates:
 
 ### 8. CODEOWNERS
 
-A single CODEOWNERS file pointing the entire repo to `@sandy001-kki`.
+A single CODEOWNERS file pointing the entire repo to `@sandeepbollavaram`.
 Easy to extend later; signals that v1.x is maintained.
 
 ### 9. SECURITY.md

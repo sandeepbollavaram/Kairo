@@ -27,7 +27,7 @@
    If it returns an existing package, fall back to the scoped form by
    editing `package.json`:
    ```jsonc
-   { "name": "@sandy001-kki/kairo", ... }
+   { "name": "@sandeepbollavaram/kairo", ... }
    ```
    (The scoped form needs `publishConfig.access: "public"` — already set.)
 
@@ -85,7 +85,7 @@ npm publish --dry-run
 
 # 4. Real publish.
 npm publish
-#   - If using the scoped name (@sandy001-kki/kairo) the first time,
+#   - If using the scoped name (@sandeepbollavaram/kairo) the first time,
 #     pass --access public on the first publish only.
 #   - npm will prompt for your 2FA OTP. Type it in and press enter.
 ```
