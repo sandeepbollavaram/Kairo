@@ -26,6 +26,10 @@ export function atlasShellHtml(): string {
     <div class="atlas-controls" role="toolbar" aria-label="Atlas controls">
       <span id="atlas-overview" class="atlas-overview-line">—</span>
       <span class="atlas-spacer"></span>
+      <span class="atlas-modes" role="group" aria-label="View mode">
+        <button id="atlas-mode-2d" type="button" class="atlas-ctl atlas-mode-active">2D</button>
+        <button id="atlas-mode-3d" type="button" class="atlas-ctl">3D</button>
+      </span>
       <label class="atlas-ctl">
         Top
         <select id="atlas-top" aria-label="Maximum nodes by salience">
@@ -56,7 +60,8 @@ export function atlasShellHtml(): string {
           <li>Ring = risk (amber/red)</li>
           <li>Tick = changed by AI</li>
           <li>Click a node to focus its neighbours</li>
-          <li>Scroll = zoom · drag = pan</li>
+          <li>2D: drag = pan · 3D: drag = rotate</li>
+          <li>Scroll = zoom · Shift+drag = pan (3D)</li>
         </ul>
       </div>
     </div>
