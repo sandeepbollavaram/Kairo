@@ -412,8 +412,10 @@ npm install && npm run build
 
 ## Inspect surface
 
-Browser-based read-only inspector. Zero JS, no remote assets, CSP
-`default-src 'none'`. Useful for triage, debugging, demos.
+Browser-based read-only inspector. No remote assets. Every route except
+`/atlas*` is JS-free with CSP `default-src 'none'`; `/atlas*` carries a
+scoped `script-src 'self'` policy (see [Kairo Atlas](#kairo-atlas)). Useful
+for triage, debugging, demos.
 
 ```bash
 $ npx kairo inspect
@@ -423,10 +425,59 @@ ready http://127.0.0.1:4173
 Routes: `/`, `/sessions`, `/sessions/:id`, `/checkpoints`,
 `/checkpoints/:id`, `/continuations/:name`, `/timeline`, `/graphs`,
 `/graphs/:kind`, `/memory`, `/coordination`, `/risk`, `/events`,
-`/retrieval/:id`.
+`/retrieval/:id`, `/atlas`.
 
 Bind defaults to `127.0.0.1` — loopback only. `--host 0.0.0.0` is allowed
 but **not** recommended.
+
+---
+
+## Kairo Atlas
+
+Kairo Atlas is a **local, read-only interactive architecture map** generated
+from Kairo's deterministic repo intelligence. It helps humans inspect modules,
+dependencies, risk overlays, and AI-session activity **without reading raw JSON
+or Mermaid files**.
+
+```bash
+npm install -g kairo-mcp
+cd your-project
+kairo init          # wire Kairo into the project (once)
+kairo inspect       # start the local inspector
+# open http://127.0.0.1:4173/atlas
+```
+
+> Atlas projects the cached module graph, which Kairo produces when it scans the
+> repo. If you've run a Kairo session in the project, the scan already happened;
+> otherwise start a session in your MCP host (or have the agent call
+> `kairo_repo_scan`), then refresh `/atlas`.
+
+**Screenshots** _(capture locally; the repo ships no binary/remote images):_
+`atlas-2d-overview` · `atlas-3d` · `atlas-search` · `atlas-detail`.
+
+**What it gives you:**
+
+- **2D map** (default) — pan / zoom / click; nodes sized by salience, coloured
+  by group, risk rings, changed-by-AI ticks.
+- **3D map** — rotate / zoom / pan / reset-camera; a self-authored projection,
+  no third-party 3D library.
+- **Search** — `/` to focus; match by path/module with neighbour highlighting
+  and a results list.
+- **Filters** — hide docs/tests/examples/generated; focus source-only,
+  high-salience, high-risk, changed, checkpoint-related, session-related.
+- **Node detail panel** — salience, centrality, fan-in/out, risk, and clickable
+  incoming/outgoing dependencies to walk the graph.
+- **Top-N control** + an honest **truncation banner** on large graphs.
+
+**Local-first & safe:** served from the loopback inspector, read-only, no
+network, no CDN/remote assets. Only `/atlas*` relaxes the CSP to
+`script-src 'self'` (no `unsafe-inline`, no `unsafe-eval`, no remote origins);
+the backend `.kairo/` state stays the source of truth.
+
+**Honest scope:** Atlas visualizes Kairo's deterministic signals — static import
+edges collapsed to directory granularity, salience-capped for readability. It
+does not claim to understand every codebase. Full guide:
+[docs/ATLAS.md](docs/ATLAS.md) · design: [ADR-0019](docs/adr/0019-kairo-atlas.md).
 
 ---
 

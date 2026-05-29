@@ -6,6 +6,67 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-30
+
+**Kairo Atlas — a local, read-only interactive architecture map.** Kairo
+already extracts precise structural signals (the collapsed module graph,
+salience, risk, checkpoint/session activity) but only stores them as
+`.kairo/*.jsonl`, Mermaid text, and markdown — formats a human cannot
+scan to answer "what are the important modules, how is this connected,
+what's risky, what did the AI change?". Atlas projects those existing
+signals into a navigable picture so a person can **see** the architecture
+instead of reading raw artifacts. It is a projection (ADR-0011): no new
+analysis engine, no new MCP tools, no schema changes — a view in the
+existing inspect surface at `kairo inspect → /atlas`. Design and
+trade-offs: [ADR-0019](docs/adr/0019-kairo-atlas.md).
+
+### Added
+
+- **2D architecture map** (default view) — deterministic, self-authored
+  canvas renderer over the cached module graph. Pan/zoom/click; nodes
+  sized by salience (degree centrality), coloured by group, risk rings,
+  changed-by-AI ticks. Seeded force layout (no third-party graph library).
+- **3D architecture map** — a hand-written perspective projection of the
+  same payload (rotate / zoom / pan via Shift+drag / reset camera /
+  depth-aware selection). No three.js, no WebGL library, no CDN.
+- **Search** — `/` focuses the box; case-insensitive path/module matching
+  with matched-node halos, neighbour highlighting, and a results list.
+- **Filters** — hide docs/tests/examples/generated; focus source-only,
+  high-salience, high-risk, changed, checkpoint-related, session-related.
+  Filtering is layout-stable (no relayout) across 2D, 3D, and hit-testing.
+- **Node detail panel** — salience, centrality, fan-in/out, group/risk and
+  changed/checkpoint/session badges, plus clickable incoming/outgoing
+  dependency lists to walk the graph. Built entirely client-side from the
+  delivered payload (no new endpoint, no added fields, safe DOM APIs only).
+- **Deterministic graph payload** at `GET /atlas/graph.json?kind=&top=`:
+  schema-versioned, nodes sorted `(−salience, id)`, edges `(from, to)`,
+  repo-relative ids only, top-N salience cap (default 50) with an explicit
+  honest `truncation` block. No wall-clock time, no randomness, no absolute
+  paths.
+- **Scoped CSP** — only `/atlas*` responses carry
+  `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'`
+  (no `unsafe-inline`, no `unsafe-eval`, no remote origins). The rest of the
+  inspect surface keeps its stricter JS-free `default-src 'none'` policy.
+- **Documentation** — [docs/ATLAS.md](docs/ATLAS.md) usage guide and a
+  README "Kairo Atlas" section. Screenshots are intentionally **not**
+  committed (local-first; no binary assets, no remote/CDN images).
+- **Tests** — Atlas projection, routes/CSP, 2D, 3D, search/filters, and
+  detail-panel suites asserting payload shape, CSP equality, and the
+  absence of `eval`/remote origins/`innerHTML` in the renderer.
+
+Dogfooded on the Kairo repository itself during development.
+
+**Local-first, read-only, no remote assets.** Atlas is served from the
+loopback inspector, never writes `.kairo/`, and makes only a same-origin
+`fetch('/atlas/graph.json')`.
+
+**Honest limitations.** The graph is built from statically-extracted
+internal relative imports (JS/TS + Python — ADR-0005); dynamic imports and
+external packages are excluded by design. Nodes are directory-collapsed for
+readability, and large graphs are truncated to the top-N most salient nodes
+(the truncation banner says so). Atlas visualizes Kairo's deterministic
+signals; it does not claim to understand every codebase.
+
 ## [1.4.2] - 2026-05-23
 
 **Cross-language doctor/init correctness.** Three honest defects in
@@ -1326,7 +1387,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/sandeepbollavaram/Kairo/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/sandeepbollavaram/Kairo/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/sandeepbollavaram/Kairo/compare/v1.3.1...v1.4.0
