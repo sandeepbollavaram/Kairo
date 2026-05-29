@@ -41,6 +41,32 @@ export function atlasShellHtml(): string {
       </label>
       <button id="atlas-reset" type="button" class="atlas-ctl">Reset view</button>
     </div>
+    <div class="atlas-controls atlas-controls-filters" role="toolbar" aria-label="Search and filters">
+      <span class="atlas-search-wrap">
+        <input
+          id="atlas-search"
+          type="search"
+          class="atlas-search"
+          placeholder="Search modules…  ( / )"
+          aria-label="Search modules"
+          autocomplete="off"
+        />
+        <div id="atlas-results" class="atlas-results atlas-hidden" role="listbox" aria-label="Search results"></div>
+      </span>
+      <span class="atlas-spacer"></span>
+      <span class="atlas-filters" role="group" aria-label="Filters">
+        <button type="button" class="atlas-chip" data-filter="source">source only</button>
+        <button type="button" class="atlas-chip" data-filter="changed">changed</button>
+        <button type="button" class="atlas-chip" data-filter="risk">risk</button>
+        <button type="button" class="atlas-chip" data-filter="salience">high salience</button>
+        <button type="button" class="atlas-chip" data-filter="checkpoint">checkpoint</button>
+        <button type="button" class="atlas-chip" data-filter="session">session</button>
+        <button type="button" class="atlas-chip" data-filter="hideDocs">hide docs</button>
+        <button type="button" class="atlas-chip" data-filter="hideTests">hide tests</button>
+        <button type="button" class="atlas-chip" data-filter="hideExamples">hide examples</button>
+        <button type="button" class="atlas-chip" data-filter="hideGenerated">hide generated</button>
+      </span>
+    </div>
     <div id="atlas-banner" class="atlas-banner atlas-hidden" role="status"></div>
     <div class="atlas-stage">
       <canvas id="atlas-canvas" class="atlas-canvas" aria-label="Architecture map"></canvas>

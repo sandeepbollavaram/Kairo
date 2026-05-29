@@ -55,12 +55,60 @@ export const ATLAS_APP_JS = `(() => {
   var mode = '2d';
   var view = { scale: 1, tx: 0, ty: 0 };                 // 2D pan/zoom
   var cam = { yaw: 0.6, pitch: 0.5, dist: 700, panX: 0, panY: 0 }; // 3D camera
+  var SALIENCE_HI = 0.5; // "high salience" threshold for the filter chip
+  function emptyFilters() {
+    return {
+      source: false, changed: false, risk: false, salience: false,
+      checkpoint: false, session: false,
+      hideDocs: false, hideTests: false, hideExamples: false, hideGenerated: false
+    };
+  }
   var model = {
-    nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {}
+    nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {},
+    filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}
   };
 
   function radiusOf(n) { return 4 + (n.salience || 0) * 18; }
   function clampScale(s) { return Math.max(0.6, Math.min(1.6, s)); }
+
+  // ---- filters: a node is visible if it passes all active "hide" toggles
+  //      AND (no "focus" toggle active, OR it matches at least one) ----------
+  function isVisible(n) {
+    var f = model.filters;
+    if (f.hideDocs && n.group === 'docs') return false;
+    if (f.hideTests && n.group === 'test') return false;
+    if (f.hideExamples && n.group === 'example') return false;
+    if (f.hideGenerated && n.group === 'generated') return false;
+    var focus = [];
+    if (f.source) focus.push(n.group === 'source');
+    if (f.changed) focus.push(!!(n.flags && n.flags.changed));
+    if (f.risk) focus.push(n.risk === 'medium' || n.risk === 'high');
+    if (f.salience) focus.push((n.salience || 0) >= SALIENCE_HI);
+    if (f.checkpoint) focus.push(!!(n.flags && n.flags.checkpoint));
+    if (f.session) focus.push(!!(n.flags && n.flags.session));
+    if (focus.length === 0) return true;
+    for (var i = 0; i < focus.length; i++) if (focus[i]) return true;
+    return false;
+  }
+
+  // ---- search: match by id or label substring; track matched + neighbours --
+  function recomputeMatches() {
+    model.matches = {}; model.matchNeighbors = {};
+    var q = (model.query || '').trim().toLowerCase();
+    if (!q) return;
+    for (var i = 0; i < model.nodes.length; i++) {
+      var n = model.nodes[i];
+      if (!isVisible(n)) continue;
+      if (n.id.toLowerCase().indexOf(q) !== -1 || (n.label || '').toLowerCase().indexOf(q) !== -1) {
+        model.matches[n.id] = true;
+      }
+    }
+    for (var e = 0; e < model.edges.length; e++) {
+      var ed = model.edges[e];
+      if (model.matches[ed.from]) model.matchNeighbors[ed.to] = true;
+      if (model.matches[ed.to]) model.matchNeighbors[ed.from] = true;
+    }
+  }
 
   // ===== 2D layout (seeded force) =========================================
   function layout2d(graph) {
@@ -190,8 +238,11 @@ export const ATLAS_APP_JS = `(() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     var hasSel = !!model.sel;
+    var vis = visibleSet();
     for (var i = 0; i < model.edges.length; i++) {
-      var ed = model.edges[i], P = model.pos2[ed.from], Q = model.pos2[ed.to]; if (!P || !Q) continue;
+      var ed = model.edges[i];
+      if (!vis[ed.from] || !vis[ed.to]) continue;
+      var P = model.pos2[ed.from], Q = model.pos2[ed.to]; if (!P || !Q) continue;
       var sp = worldToScreen2(P), sq = worldToScreen2(Q);
       var active = hasSel && (ed.from === model.sel || ed.to === model.sel);
       ctx.strokeStyle = active ? 'rgba(59,130,246,0.85)' : (hasSel ? 'rgba(140,140,140,0.10)' : 'rgba(140,140,140,0.28)');
@@ -200,11 +251,21 @@ export const ATLAS_APP_JS = `(() => {
     }
     model.screen = {};
     for (var j = 0; j < model.nodes.length; j++) {
-      var n = model.nodes[j], p = model.pos2[n.id]; if (!p) continue;
+      var n = model.nodes[j]; if (!vis[n.id]) continue;
+      var p = model.pos2[n.id]; if (!p) continue;
       var s = worldToScreen2(p); model.screen[n.id] = s;
       drawNode(n, s.x, s.y, radiusOf(n) * clampScale(view.scale), hasSel);
     }
     ctx.globalAlpha = 1;
+  }
+
+  // Set of node ids currently passing the filters (computed once per draw).
+  function visibleSet() {
+    var v = {};
+    for (var i = 0; i < model.nodes.length; i++) {
+      if (isVisible(model.nodes[i])) v[model.nodes[i].id] = true;
+    }
+    return v;
   }
 
   function draw3d() {
@@ -212,11 +273,13 @@ export const ATLAS_APP_JS = `(() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     var hasSel = !!model.sel;
+    var vis = visibleSet();
 
-    // project all nodes once
+    // project all visible nodes once
     var proj = {};
     for (var i = 0; i < model.nodes.length; i++) {
-      var n = model.nodes[i], p = model.pos3[n.id]; if (!p) continue;
+      var n = model.nodes[i]; if (!vis[n.id]) continue;
+      var p = model.pos3[n.id]; if (!p) continue;
       proj[n.id] = project3(p);
     }
     model.screen = proj;
@@ -244,18 +307,28 @@ export const ATLAS_APP_JS = `(() => {
 
   // shared node draw (screen coords + radius supplied by the caller)
   function drawNode(n, x, y, r, hasSel) {
-    var dim = hasSel && n.id !== model.sel && !model.neighbors[n.id];
-    ctx.globalAlpha = dim ? 0.18 : 1;
+    var hasQuery = !!(model.query && model.query.trim());
+    var isMatch = hasQuery && model.matches[n.id];
+    var isMatchN = hasQuery && model.matchNeighbors[n.id];
+    var dim;
+    if (hasQuery) dim = !isMatch && !isMatchN;
+    else dim = hasSel && n.id !== model.sel && !model.neighbors[n.id];
+    ctx.globalAlpha = dim ? 0.16 : 1;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = GROUP_COLORS[n.group] || GROUP_COLORS.other; ctx.fill();
     var ring = n.risk ? RISK_RING[n.risk] : '';
     if (ring) { ctx.lineWidth = 2 * dpr; ctx.strokeStyle = ring; ctx.stroke(); }
+    if (isMatch) {
+      // bright search-match halo (drawn over any risk ring)
+      ctx.lineWidth = 2.5 * dpr; ctx.strokeStyle = '#f59e0b';
+      ctx.beginPath(); ctx.arc(x, y, r + 3 * dpr, 0, Math.PI * 2); ctx.stroke();
+    }
     if (n.flags && n.flags.changed) {
       ctx.beginPath(); ctx.arc(x + r * 0.8, y - r * 0.8, 2.2 * dpr, 0, Math.PI * 2);
       ctx.fillStyle = '#111827'; ctx.fill();
     }
     ctx.globalAlpha = 1;
-    var showLabel = r > 9 * dpr || n.id === model.sel || model.neighbors[n.id];
+    var showLabel = r > 9 * dpr || n.id === model.sel || model.neighbors[n.id] || isMatch;
     if (showLabel) {
       ctx.fillStyle = 'rgba(80,80,80,0.95)';
       ctx.font = (11 * dpr) + 'px ui-sans-serif, system-ui, sans-serif';
@@ -279,6 +352,7 @@ export const ATLAS_APP_JS = `(() => {
     var best = null, bestD = Infinity;
     for (var i = 0; i < model.nodes.length; i++) {
       var n = model.nodes[i], s = model.screen[n.id]; if (!s) continue;
+      if (!isVisible(n)) continue;
       var base = radiusOf(n);
       var r = (mode === '3d') ? base * Math.max(0.45, Math.min(1.8, s.s || 1)) : base * clampScale(view.scale);
       var dx = sx - s.x, dy = sy - s.y, d = Math.sqrt(dx * dx + dy * dy);
@@ -339,6 +413,8 @@ export const ATLAS_APP_JS = `(() => {
     var reset = byId('atlas-reset');
     if (reset) reset.addEventListener('click', function () {
       selectNode(null);
+      clearSearch();
+      clearFilters();
       resizeCanvas();
       if (mode === '3d') resetCamera(); else fitView();
       draw();
@@ -348,6 +424,89 @@ export const ATLAS_APP_JS = `(() => {
     var m2 = byId('atlas-mode-2d'), m3 = byId('atlas-mode-3d');
     if (m2) m2.addEventListener('click', function () { setMode('2d'); });
     if (m3) m3.addEventListener('click', function () { setMode('3d'); });
+
+    // ---- search ----------------------------------------------------------
+    var search = byId('atlas-search');
+    if (search) {
+      search.addEventListener('input', function () {
+        model.query = search.value || '';
+        recomputeMatches();
+        renderResults();
+        draw();
+      });
+      search.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { search.value = ''; model.query = ''; recomputeMatches(); renderResults(); draw(); search.blur(); }
+      });
+    }
+    // '/' focuses search (unless already typing in it)
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === '/' && document.activeElement !== search) {
+        ev.preventDefault();
+        if (search) search.focus();
+      }
+    });
+
+    // ---- filter chips ----------------------------------------------------
+    var chips = document.querySelectorAll('[data-filter]');
+    for (var c = 0; c < chips.length; c++) {
+      (function (chip) {
+        chip.addEventListener('click', function () {
+          var key = chip.getAttribute('data-filter');
+          model.filters[key] = !model.filters[key];
+          chip.classList.toggle('atlas-chip-active', !!model.filters[key]);
+          // selection/search may now reference hidden nodes — recompute matches.
+          recomputeMatches(); renderResults(); draw();
+        });
+      })(chips[c]);
+    }
+  }
+
+  function clearSearch() {
+    model.query = ''; model.matches = {}; model.matchNeighbors = {};
+    var search = byId('atlas-search'); if (search) search.value = '';
+    renderResults();
+  }
+  function clearFilters() {
+    model.filters = emptyFilters();
+    var chips = document.querySelectorAll('[data-filter]');
+    for (var i = 0; i < chips.length; i++) chips[i].classList.remove('atlas-chip-active');
+  }
+
+  // Render the search result list (matched node labels; click to focus).
+  function renderResults() {
+    var box = byId('atlas-results'); if (!box) return;
+    box.textContent = '';
+    var ids = Object.keys(model.matches);
+    if (ids.length === 0) { box.classList.add('atlas-hidden'); return; }
+    ids.sort();
+    var shown = ids.slice(0, 12);
+    for (var i = 0; i < shown.length; i++) {
+      (function (id) {
+        var item = document.createElement('div');
+        item.className = 'atlas-result';
+        item.setAttribute('role', 'option');
+        item.textContent = id;
+        item.addEventListener('click', function () { focusNode(id); });
+        box.appendChild(item);
+      })(shown[i]);
+    }
+    if (ids.length > shown.length) {
+      var more = document.createElement('div');
+      more.className = 'atlas-result atlas-result-more';
+      more.textContent = '+' + (ids.length - shown.length) + ' more';
+      box.appendChild(more);
+    }
+    box.classList.remove('atlas-hidden');
+  }
+
+  // Select a node and center the view on it (2D pans; 3D just selects).
+  function focusNode(id) {
+    selectNode(id);
+    if (mode === '2d') {
+      var p = model.pos2[id];
+      if (p && canvas) { view.tx = canvas.width / 2 - p.x * view.scale; view.ty = canvas.height / 2 - p.y * view.scale; }
+    }
+    draw();
   }
 
   function setMode(m) {
@@ -380,7 +539,11 @@ export const ATLAS_APP_JS = `(() => {
       }
 
       if (!g.hasGraph || g.nodes.length === 0) {
-        model = { nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {} };
+        model = {
+          nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {},
+          filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}
+        };
+        clearSearch(); clearFilters();
         setText('atlas-status', g.note || 'No graph to display.');
         resizeCanvas(); draw(); return;
       }
@@ -389,6 +552,8 @@ export const ATLAS_APP_JS = `(() => {
       model.pos2 = layout2d(g);
       model.pos3 = (mode === '3d') ? layout3d(g) : {};
       model.sel = null; model.neighbors = {};
+      model.query = ''; model.matches = {}; model.matchNeighbors = {};
+      clearSearch();
       setText('atlas-status', '');
       var st = byId('atlas-status'); if (st) st.classList.add('atlas-hidden');
       resizeCanvas();
@@ -451,6 +616,37 @@ body {
 .atlas-mode-active {
   background: color-mix(in srgb, #3b82f6 22%, transparent);
   border-color: color-mix(in srgb, #3b82f6 60%, transparent);
+}
+.atlas-controls-filters { gap: 8px; }
+.atlas-search-wrap { position: relative; }
+.atlas-search {
+  background: Canvas; color: CanvasText;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 6px; padding: 5px 10px; font: inherit; min-width: 220px;
+}
+.atlas-search::placeholder { color: color-mix(in srgb, CanvasText 50%, transparent); }
+.atlas-results {
+  position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 5;
+  min-width: 220px; max-height: 240px; overflow: auto;
+  background: Canvas; color: CanvasText;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 8px; box-shadow: 0 6px 20px color-mix(in srgb, CanvasText 25%, transparent);
+}
+.atlas-result { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.atlas-result:hover { background: color-mix(in srgb, #3b82f6 18%, transparent); }
+.atlas-result-more { opacity: 0.6; cursor: default; font-style: italic; }
+.atlas-result-more:hover { background: transparent; }
+.atlas-filters { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.atlas-chip {
+  font: inherit; font-size: 12px; padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+  border-radius: 999px; background: transparent; color: inherit; cursor: pointer; opacity: 0.85;
+}
+.atlas-chip:hover { opacity: 1; }
+.atlas-chip-active {
+  background: color-mix(in srgb, #3b82f6 22%, transparent);
+  border-color: color-mix(in srgb, #3b82f6 60%, transparent);
+  opacity: 1;
 }
 .atlas-banner {
   padding: 8px 24px; font-size: 13px;
