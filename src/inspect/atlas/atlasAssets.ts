@@ -433,7 +433,21 @@ body {
   border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
   border-radius: 6px; background: transparent; color: inherit; cursor: pointer;
 }
-.atlas-ctl select { background: transparent; color: inherit; border: 0; font: inherit; cursor: pointer; }
+/* Explicit Canvas/CanvasText so the native option popup is readable in both
+   light and dark themes. A transparent/inherited select renders the dropdown
+   list white-on-white in dark mode (the OS popup background ignores
+   'transparent'); pinning both colours fixes the contrast. */
+.atlas-ctl select {
+  background: Canvas;
+  color: CanvasText;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.atlas-ctl select option {
+  background: Canvas;
+  color: CanvasText;
+}
 .atlas-mode-active {
   background: color-mix(in srgb, #3b82f6 22%, transparent);
   border-color: color-mix(in srgb, #3b82f6 60%, transparent);
