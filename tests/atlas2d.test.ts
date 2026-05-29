@@ -104,6 +104,11 @@ describe('Atlas 2D — shell + assets', () => {
     expect(css).toContain('.atlas-canvas');
     expect(css).not.toMatch(/@import\s+url\(\s*["']?https?:/i);
     expect(css).not.toMatch(/url\(\s*["']?https?:/i); // no remote url() either
+    // Regression guard (PR: select contrast): the Top dropdown options must
+    // carry explicit theme colours so the native popup is not white-on-white
+    // in dark mode.
+    expect(css).toContain('.atlas-ctl select option');
+    expect(css).toMatch(/\.atlas-ctl select option\s*\{[^}]*CanvasText/);
   });
 });
 
