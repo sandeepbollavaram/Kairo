@@ -6,6 +6,58 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-05-30
+
+**Atlas Capsule — a portable, token-budgeted AI handoff package.** Kairo
+already provides continuity artifacts (repo memory, checkpoints, briefs,
+Atlas, graphs, telemetry), yet a fresh agent session still tends to re-scan
+large parts of the repository to re-orient — wasting context before any new
+work starts. Atlas Capsule is the missing bootstrap: a compact, trusted
+continuation package generated from existing Kairo state that tells the next
+agent what is known, what changed, **what to read first**, and **what is safe
+to skip initially**. It is a projection only (ADR-0020): no new state store,
+no schema changes, no mutation of `.kairo/`. Capsule **reduces unnecessary
+rescanning**; it does not stop all rescanning or guarantee no rereads — it is
+a trusted starting point, not a replacement for validation. Design:
+[ADR-0020](docs/adr/0020-atlas-capsule.md).
+
+### Added
+
+- **Capsule engine** (`src/core/capsule/`) — deterministic, replay-safe
+  projection + renderer. Builds a neutral `CapsuleProjection` from the latest
+  checkpoint, Atlas graph, repo intelligence, changed files, git
+  branch/version, and optional memory recall, then renders target-framed,
+  budget-bounded markdown.
+- **Three modes** with character budgets (a tokeniser-agnostic proxy):
+  `tiny` (~1,500), `standard` (~4,000, default), `deep` (~20,000). Capsules
+  are bounded; exceeding the budget appends a visible truncation marker.
+- **Four targets**: `claude`, `codex`, `cursor`, `generic` — framing only,
+  never the underlying facts.
+- **`kairo capsule` CLI command** — `--mode`, `--target`, `--output`/`-o`,
+  `--max-chars`, `--agents-md`, `--force`, `--json`. Default
+  standard/generic; deep is only printed when explicitly requested.
+- **`kairo_capsule_create` MCP tool** (experimental) — inputs mode / target /
+  maxChars / includeAgentsMd / force; output is a compact summary plus
+  structured JSON (chars, truncation status, files to read first, safe-to-skip
+  list). Token-efficient by default.
+- **AGENTS.md export** (Codex) — `kairo capsule --target codex --agents-md`
+  writes an `AGENTS.md` with a generated header, continuation instructions,
+  read-first plan, safe-to-skip list, and do-not-touch warnings. Refuses to
+  overwrite an existing file without `--force`.
+- **Capsules tab in the Inspect dashboard** (`/capsules`) — read-only
+  generated preview with mode/target selectors, char count, truncation
+  status, files to read first, and safe-to-skip list. This view never writes
+  a file; create/export is via the CLI or MCP tool.
+- **Docs**: [docs/CAPSULE.md](docs/CAPSULE.md) (full guide) and
+  [docs/CAPSULE_DOGFOOD.md](docs/CAPSULE_DOGFOOD.md) (measured sizes on Kairo
+  itself + honest limits).
+
+### Security
+
+- Capsules pass through Kairo's redaction boundary plus a final redaction pass
+  in the renderer (secrets removed), and emit only repo-relative paths — no
+  absolute local paths — so a capsule is safe to paste into another AI agent.
+
 ## [1.5.0] - 2026-05-30
 
 **Kairo Atlas — a local, read-only interactive architecture map.** Kairo

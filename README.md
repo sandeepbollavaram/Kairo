@@ -7,10 +7,10 @@
 [![npm](https://img.shields.io/npm/v/kairo-mcp.svg?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/kairo-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/kairo-mcp.svg?color=cb3837)](https://www.npmjs.com/package/kairo-mcp)
 [![Latest release](https://img.shields.io/github/v/release/sandeepbollavaram/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandeepbollavaram/Kairo/releases)
-[![Tests](https://img.shields.io/badge/tests-205%20passing-brightgreen)](tests)
-[![ADRs](https://img.shields.io/badge/ADRs-18-informational)](docs/adr)
-[![MCP tools](https://img.shields.io/badge/MCP%20tools-41-blueviolet)](docs/API_STABILITY.md)
-[![Stable surface](https://img.shields.io/badge/stable-33%20tools%20%2B%2014%20routes-success)](docs/API_STABILITY.md)
+[![Tests](https://img.shields.io/badge/tests-280%20passing-brightgreen)](tests)
+[![ADRs](https://img.shields.io/badge/ADRs-20-informational)](docs/adr)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-42-blueviolet)](docs/API_STABILITY.md)
+[![Stable surface](https://img.shields.io/badge/stable-35%20tools%20%2B%2014%20routes-success)](docs/API_STABILITY.md)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Local-first](https://img.shields.io/badge/local--first-no%20network-555)](docs/ARCHITECTURE.md)
@@ -55,7 +55,7 @@ no rescan.
 
 | Layer                   | What it does                                                   | Where it lives                        |
 | ----------------------- | -------------------------------------------------------------- | ------------------------------------- |
-| **MCP server**          | 41 tools the agent calls during work.                          | stdio, launched by your MCP host.     |
+| **MCP server**          | 42 tools the agent calls during work.                          | stdio, launched by your MCP host.     |
 | **Session ledger**      | Append-only log of events, decisions, errors.                  | `.kairo/events.jsonl`                 |
 | **Checkpoints**         | Durable, sanitized, resumable snapshots.                       | `.kairo/checkpoints/*.json`           |
 | **Continuation briefs** | Markdown handoffs in three size modes.                         | `.kairo/continuations/*.md`           |
@@ -157,7 +157,7 @@ Initialised
 Next steps
   1. Open Claude Code in this project: claude
   2. Inside the session, run: /mcp
-     → you should see  kairo · connected · 41 tools
+     → you should see  kairo · connected · 42 tools
   3. If anything looks off, run: kairo doctor
 ```
 
@@ -195,7 +195,7 @@ Initialised
 Next steps
   1. Open Claude Code in this project: claude
   2. Inside the session, run: /mcp
-     → you should see  kairo · connected · 41 tools
+     → you should see  kairo · connected · 42 tools
   3. If anything looks off, run: kairo doctor
 
 # ── Day 1: open Claude Code, work for an hour, end the session ────────
@@ -517,6 +517,54 @@ does not claim to understand every codebase. Full guide:
 
 ---
 
+## Atlas Capsule
+
+> **Kairo Atlas helps humans understand the codebase. Atlas Capsule helps AI
+> agents continue the work.**
+
+Atlas Capsule (v1.6.0) is a portable, token-budgeted **AI handoff package**. When
+one agent times out or hits its context limit, generate a capsule and paste or
+export it into the next agent — Claude Code, Codex, Cursor, or any generic AI
+coding agent — so it continues with **significantly less unnecessary
+rescanning**.
+
+**Why it exists.** Even with repo memory, checkpoints, briefs, Atlas, graphs, and
+telemetry, a fresh agent session still tends to re-scan large parts of the
+repository to re-orient, wasting context before any new work starts. Capsule is
+the missing piece: one trusted bootstrap package that states what is known, what
+changed, **what to read first**, and **what is safe to skip initially**.
+
+**How it reduces rescanning.** The capsule hands the next agent a risk-ranked
+read-first plan plus a "safe to skip initially" list (always phrased _unless you
+detect a mismatch_), so it starts at the active code instead of walking the tree.
+
+```sh
+kairo capsule                                    # standard / generic → stdout
+kairo capsule --mode tiny                         # urgent handoff (~1.5k chars)
+kairo capsule --target codex --mode standard      # Claude → Codex handoff
+kairo capsule --target codex --agents-md          # write AGENTS.md (Codex)
+kairo capsule --target claude --output capsule.md # write to a file
+```
+
+There is also an MCP tool `kairo_capsule_create` and a read-only **Capsules** tab
+in `kairo inspect`.
+
+**Claude → Codex handoff.** When Claude is about to run out of context, run
+`kairo capsule --target codex --mode standard --output handoff.md` (or call
+`kairo_capsule_create`), then paste `handoff.md` into Codex — or commit an
+`AGENTS.md` via `--agents-md` (it refuses to overwrite an existing file without
+`--force`).
+
+**Honest limits.** A capsule **reduces unnecessary** rescanning; it does not stop
+all rescanning or guarantee no rereads. It is a trusted starting point, not a
+replacement for validation — agents may still reread files to verify safety. It
+is a projection of existing state and never mutates `.kairo/`. Secrets are
+redacted and only repo-relative paths appear, so a capsule is safe to paste into
+another agent. Full guide: [docs/CAPSULE.md](docs/CAPSULE.md) · measured sizes &
+limits: [docs/CAPSULE_DOGFOOD.md](docs/CAPSULE_DOGFOOD.md).
+
+---
+
 ## Architecture (overview)
 
 ```
@@ -527,7 +575,7 @@ does not claim to understand every codebase. Full guide:
                            │ MCP (stdio)
         ┌──────────────────▼───────────────────────────┐
         │              Kairo MCP server                 │
-        │  41 tools · prompts · resources              │
+        │  42 tools · prompts · resources              │
         └──────────────────┬───────────────────────────┘
                            │
         ┌──────────────────▼───────────────────────────┐
@@ -598,7 +646,7 @@ Every command honours `--json`, `--quiet`, `--verbose`, `--no-color`,
 
 ## MCP surface (v1.2.0)
 
-41 tools total — 33 stable + 6 experimental. The full list:
+42 tools total — 35 stable + 7 experimental. The full list:
 
 | Group                                      | Tools                                                                                           |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------- |
@@ -835,6 +883,8 @@ Explicitly **not on the roadmap**:
 | [`docs/PLUGIN_API.md`](docs/PLUGIN_API.md)                             | Plugin manifest contract.                              |
 | [`docs/MCP_COMPATIBILITY.md`](docs/MCP_COMPATIBILITY.md)               | What Kairo promises about MCP.                         |
 | [`docs/SURFACES.md`](docs/SURFACES.md)                                 | Inspect + VS Code + Cursor.                            |
+| [`docs/CAPSULE.md`](docs/CAPSULE.md)                                   | Atlas Capsule — portable AI handoff package.           |
+| [`docs/CAPSULE_DOGFOOD.md`](docs/CAPSULE_DOGFOOD.md)                   | Measured capsule sizes + honest limits.                |
 | [`docs/TOKEN_EFFICIENCY.md`](docs/TOKEN_EFFICIENCY.md)                 | Brief budgets + compact responses.                     |
 | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)                           | Benchmark harness + incremental indexing + compaction. |
 | [`docs/V1_READINESS.md`](docs/V1_READINESS.md)                         | v1.0.0 entry criteria + compatibility matrix.          |
