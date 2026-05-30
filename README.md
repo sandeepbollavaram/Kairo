@@ -452,8 +452,44 @@ kairo inspect       # start the local inspector
 > otherwise start a session in your MCP host (or have the agent call
 > `kairo_repo_scan`), then refresh `/atlas`.
 
-**Screenshots** _(capture locally; the repo ships no binary/remote images):_
-`atlas-2d-overview` · `atlas-3d` · `atlas-search` · `atlas-detail`.
+**Screenshots** _(captured on the Kairo repo itself; committed locally — no
+remote/CDN images):_
+
+![Kairo Atlas 2D overview — the whole module graph, 33 nodes / 147 edges, nodes
+sized by salience and coloured by group, with the legend](docs/images/atlas-2d-overview.png)
+
+_2D overview — the full module graph (here Kairo itself: 33 nodes / 147 edges).
+The large green node is `tests`; blue nodes are source. Size = salience, colour =
+group._
+
+![Kairo Atlas 2D node focus — core/session selected, its dependency edges to
+core/checkpoint, core/continuation and core/brief highlighted in blue, the rest
+dimmed](docs/images/atlas-2d-node-focus.png)
+
+_Click-to-focus — selecting `core/session` highlights it and its neighbours
+(`core/checkpoint`, `core/continuation`, `core/brief`) and dims everything else,
+so a module's blast radius is obvious._
+
+![Kairo Atlas 2D truncated view — Top set to 25 with the banner "Showing top 25
+of 33 nodes by salience"](docs/images/atlas-2d-truncated.png)
+
+_Top-N + honest truncation — capping to the 25 most-salient nodes shows the
+truncation banner ("Showing top 25 of 33 nodes by salience")._
+
+![Kairo Atlas 3D view — the same graph as a perspective projection with
+core/salience, core/repo and core/vector spread in depth](docs/images/atlas-3d.png)
+
+_3D view — the same payload as a self-authored perspective projection (no
+three.js / WebGL library). Drag to rotate, scroll to zoom, Shift+drag to pan._
+
+![Kairo Atlas 3D search and filters — the "/co" search dropdown listing
+core/compaction, core/continuation, core/coordination, the filter chip row, and
+matched nodes ringed in orange](docs/images/atlas-3d-search-filters.png)
+
+_Search + filters — typing `/co` lists matching modules (`core/compaction`,
+`core/continuation`, `core/coordination`); matched nodes are ringed, and the chip
+row filters by source/changed/risk/salience/checkpoint/session or hides
+docs/tests/examples/generated._
 
 **What it gives you:**
 

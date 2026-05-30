@@ -223,20 +223,56 @@ graph and session/checkpoint data exist.
 
 ## 14. Screenshots
 
-Screenshots are not committed to the repository (no binary assets / no remote
-images by policy). To capture your own for documentation:
+These were captured against the Kairo repository itself and are committed under
+[images/](images/) (local files only — no remote/CDN images).
 
-1. Launch `kairo inspect` and open `/atlas`.
-2. Suggested shots:
-   - `atlas-2d-overview` — default 2D view, whole graph fit.
-   - `atlas-2d-focus` — a node selected, neighbours highlighted.
-   - `atlas-2d-truncated` — Top set to 25, truncation banner visible.
-   - `atlas-3d` — 3D view, slightly rotated.
-   - `atlas-search` — search active with matched halos + results list.
-   - `atlas-detail` — node detail panel open with relationships.
-3. Store them outside the repo (or in a docs site) and reference locally.
+### 2D overview
 
-> _Placeholder — add local screenshots here when documenting a release._
+![Atlas 2D overview of the Kairo module graph, 33 nodes and 147 edges, nodes
+sized by salience and coloured by group](images/atlas-2d-overview.png)
+
+The default view: the whole module graph fit to the canvas. The large green node
+is `tests`; blue nodes are source modules. Size encodes salience, colour the
+group.
+
+### 2D node focus
+
+![Atlas 2D with core/session selected and its dependency edges highlighted, the
+rest of the graph dimmed](images/atlas-2d-node-focus.png)
+
+Clicking `core/session` highlights it and its neighbours (`core/checkpoint`,
+`core/continuation`, `core/brief`) and dims everything else — a module's blast
+radius at a glance.
+
+### 2D truncated (Top-N)
+
+![Atlas 2D with Top set to 25 and the truncation banner reading "Showing top 25
+of 33 nodes by salience"](images/atlas-2d-truncated.png)
+
+Capping to the 25 most-salient nodes surfaces the honest truncation banner. Raise
+the cap with the Top-N control.
+
+### 3D view
+
+![Atlas 3D perspective projection of the same graph with core/salience,
+core/repo and core/vector spread in depth](images/atlas-3d.png)
+
+The same payload rendered as a hand-written perspective projection (no third-party
+3D library). Drag to rotate, scroll to zoom, Shift+drag to pan, Reset view to
+recenter.
+
+### Search and filters
+
+![Atlas 3D with the "/co" search dropdown listing core/compaction,
+core/continuation and core/coordination, the filter chip row, and matched nodes
+ringed in orange](images/atlas-3d-search-filters.png)
+
+Typing `/co` lists matching modules and rings them; the chip row focuses by
+source/changed/risk/salience/checkpoint/session or hides
+docs/tests/examples/generated.
+
+> To capture your own: launch `kairo inspect`, open `/atlas`, and screenshot the
+> views above. The node detail panel (click any node) is not yet pictured here.
 
 ---
 
