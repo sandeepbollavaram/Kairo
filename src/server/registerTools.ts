@@ -8,6 +8,8 @@ import { exportSnapshot } from '../snapshot/export.js';
 import { importSnapshot } from '../snapshot/import.js';
 import { runBenchmark } from '../perf/index.js';
 import { compact } from '../core/compaction/compactor.js';
+import { createCapsule } from '../core/capsule/index.js';
+import { buildAgentsMd, writeAgentsMd } from '../core/capsule/agentsMd.js';
 import { readFile } from 'node:fs/promises';
 import { kairoPaths } from '../storage/paths.js';
 import { loadPlugins } from '../plugins/loader.js';
@@ -723,6 +725,73 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         });
         if (!r) return ok('No checkpoint yet — nothing to brief.', { found: false });
         return ok(r.markdown, { found: true, mode: r.mode, chars: r.chars });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  // ── Atlas Capsule (v1.6.0, ADR-0020) ─────────────────────────────────────
+
+  server.registerTool(
+    'kairo_capsule_create',
+    {
+      title: 'Create an Atlas Capsule (portable AI handoff)',
+      description:
+        'Generate a token-budgeted continuation package for handing work to another AI ' +
+        'agent (Claude / Codex / Cursor / generic). It REDUCES unnecessary rescanning by ' +
+        'telling the next agent what changed, what to read first, and what is safe to skip ' +
+        'initially — a trusted starting point, not a guarantee. Modes: tiny (~1.5k chars) / ' +
+        'standard (~4k, default) / deep (~20k, opt-in). Projection of existing state only; ' +
+        'never mutates .kairo/. Set includeAgentsMd:true (Codex) to also write AGENTS.md ' +
+        '(refuses to clobber an existing file unless force:true).',
+      inputSchema: {
+        mode: z.enum(['tiny', 'standard', 'deep']).optional(),
+        target: z.enum(['claude', 'codex', 'cursor', 'generic']).optional(),
+        maxChars: z.number().int().min(200).max(50_000).optional(),
+        includeAgentsMd: z
+          .boolean()
+          .optional()
+          .describe('Also write AGENTS.md at the project root (Codex convention).'),
+        force: z.boolean().optional().describe('Allow overwriting an existing AGENTS.md.'),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ mode, target, maxChars, includeAgentsMd, force, projectRoot }) => {
+      try {
+        const root = projectRootFrom(projectRoot);
+        const opts: Parameters<typeof createCapsule>[0] = { projectRoot: root };
+        if (mode !== undefined) opts.mode = mode;
+        if (target !== undefined) opts.target = target;
+        if (maxChars !== undefined) opts.maxChars = maxChars;
+        const { projection, rendered } = await createCapsule(opts);
+
+        let agentsMd: { path: string; written: boolean; refusedReason?: string } | undefined;
+        if (includeAgentsMd) {
+          const body = buildAgentsMd(rendered, projection);
+          agentsMd = await writeAgentsMd(root, body, { force: force ?? false });
+        }
+
+        const summary =
+          `Capsule (${rendered.mode}/${rendered.target}): ${rendered.chars} chars` +
+          `${rendered.truncated ? ' (truncated to budget)' : ''}. ` +
+          `Read first: ${rendered.readFirst.length}, safe to skip: ${rendered.skipInitially.length}.` +
+          (agentsMd
+            ? agentsMd.written
+              ? ` AGENTS.md written → ${agentsMd.path}.`
+              : ` AGENTS.md NOT written: ${agentsMd.refusedReason}`
+            : '');
+
+        return ok(`${summary}\n\n${rendered.text}`, {
+          mode: rendered.mode,
+          target: rendered.target,
+          chars: rendered.chars,
+          truncated: rendered.truncated,
+          maxChars: rendered.maxChars,
+          readFirst: rendered.readFirst,
+          skipInitially: rendered.skipInitially,
+          ...(agentsMd ? { agentsMd } : {}),
+        });
       } catch (e) {
         return fail(e);
       }

@@ -81,6 +81,11 @@ export const STABILITY: readonly StabilityEntry[] = [
   experimentalTool('0.9.3', 'kairo_index_status'),
   experimentalTool('0.9.4', 'kairo_plugins_list', 'Manifest contract only; no in-process exec.'),
   experimentalTool('0.9.4', 'kairo_stability_of'),
+  experimentalTool(
+    '1.6.0',
+    'kairo_capsule_create',
+    'Portable AI handoff capsule; projection of existing state, never mutates .kairo/.',
+  ),
 
   // ── MCP prompt + resources ────────────────────────────────────────────
   { surface: 'mcp-prompt', id: 'kairo_continuity', tier: 'stable', since: '0.1.0' },

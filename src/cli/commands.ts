@@ -909,7 +909,7 @@ const initCmd: CommandSpec = {
         `  ${ctx.out.dim('1.')} Open Claude Code in this project: ${ctx.out.cyan('claude')}`,
       );
       ctx.out.line(`  ${ctx.out.dim('2.')} Inside the session, run: ${ctx.out.cyan('/mcp')}`);
-      ctx.out.line(`     ${ctx.out.dim('→ you should see  kairo · connected · 41 tools')}`);
+      ctx.out.line(`     ${ctx.out.dim('→ you should see  kairo · connected · 42 tools')}`);
       ctx.out.line(
         `  ${ctx.out.dim('3.')} If anything looks off, run: ${ctx.out.cyan('kairo doctor')}`,
       );
