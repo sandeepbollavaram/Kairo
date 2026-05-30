@@ -110,6 +110,15 @@ export const STABILITY: readonly StabilityEntry[] = [
     '/retrieval/:id',
   ]),
 
+  // ── Atlas Capsule inspect route (v1.6.0, ADR-0020) — experimental ────
+  {
+    surface: 'inspect-route',
+    id: '/capsules',
+    tier: 'experimental',
+    since: '1.6.0',
+    note: 'Read-only generated capsule preview; never writes.',
+  },
+
   // ── Schemas (versioned under ADR-0012) ────────────────────────────────
   { surface: 'schema', id: 'KairoEvent', tier: 'stable', since: '0.9.1' },
   { surface: 'schema', id: 'TelemetryEvent', tier: 'stable', since: '0.9.1' },

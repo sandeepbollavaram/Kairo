@@ -15,6 +15,7 @@ import type {
   SessionListEntry,
 } from './projections.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
+import type { CapsuleMode, CapsuleTarget, RenderedCapsule } from '../core/capsule/capsuleTypes.js';
 import type {
   ConflictEntry,
   LineageNode,
@@ -66,6 +67,7 @@ const NAV = [
   ['/', 'Overview'],
   ['/sessions', 'Sessions'],
   ['/checkpoints', 'Checkpoints'],
+  ['/capsules', 'Capsules'],
   ['/timeline', 'Timeline'],
   ['/graphs', 'Graphs'],
   ['/memory', 'Memory'],
@@ -423,4 +425,74 @@ export function renderRetrieval(t: RetrievalTrace): string {
 export function renderContinuation(name: string, md: string): string {
   return `<h2>Continuation brief — <code>${esc(name)}</code></h2>
 <pre>${esc(md)}</pre>`;
+}
+
+const CAPSULE_MODE_OPTS: CapsuleMode[] = ['tiny', 'standard', 'deep'];
+const CAPSULE_TARGET_OPTS: CapsuleTarget[] = ['claude', 'codex', 'cursor', 'generic'];
+
+/**
+ * Read-only Capsules view (v1.6.0, ADR-0020). Renders a generated capsule
+ * preview for the selected mode/target. The dashboard is a projection only —
+ * it never writes AGENTS.md or any file; create/export actions are exposed via
+ * the `kairo capsule` CLI and the `kairo_capsule_create` MCP tool. The JS-free
+ * inspector switches mode/target through plain query-string links.
+ */
+export function renderCapsules(
+  rendered: RenderedCapsule,
+  mode: CapsuleMode,
+  target: CapsuleTarget,
+  hasCheckpoint: boolean,
+): string {
+  const sel = (kind: 'mode' | 'target', value: string, current: string): string => {
+    const q =
+      kind === 'mode'
+        ? `?mode=${esc(value)}&target=${esc(target)}`
+        : `?mode=${esc(mode)}&target=${esc(value)}`;
+    const active = value === current;
+    return `<a href="/capsules${q}" class="pill"${active ? ' style="font-weight:600;text-decoration:underline"' : ''}>${esc(value)}</a>`;
+  };
+  const modeLinks = CAPSULE_MODE_OPTS.map((m) => sel('mode', m, mode)).join(' ');
+  const targetLinks = CAPSULE_TARGET_OPTS.map((t) => sel('target', t, target)).join(' ');
+
+  const readFirst =
+    rendered.readFirst.length === 0
+      ? '<li class="empty">none — orient from the architecture summary</li>'
+      : rendered.readFirst
+          .map((f) => `<li><code>${esc(f.path)}</code> — ${esc(f.reason)}</li>`)
+          .join('');
+  const skip =
+    rendered.skipInitially.length === 0
+      ? '<li class="empty">nothing flagged</li>'
+      : rendered.skipInitially
+          .map((s) => `<li><code>${esc(s.path)}</code> — ${esc(s.reason)}</li>`)
+          .join('');
+
+  return `<h2>Atlas Capsule</h2>
+<p>Portable, token-budgeted AI handoff package. It <strong>reduces unnecessary
+rescanning</strong> by telling the next agent what changed, what to read first,
+and what is safe to skip initially — a trusted starting point, not a guarantee.
+This view is read-only; create or export with the CLI / MCP tool below.</p>
+${hasCheckpoint ? '' : '<p class="empty">No checkpoint yet — this preview is derived from repo intelligence only. Start a Kairo session to enrich it.</p>'}
+<dl class="kv">
+  <dt>Mode</dt><dd>${modeLinks}</dd>
+  <dt>Target</dt><dd>${targetLinks}</dd>
+  <dt>Char count</dt><dd>${rendered.chars} / ${rendered.maxChars} budget</dd>
+  <dt>Truncated</dt><dd>${rendered.truncated ? '<span class="pill high">yes</span>' : '<span class="pill low">no</span>'}</dd>
+</dl>
+<h2>Files to read first</h2>
+<ul>${readFirst}</ul>
+<h2>Safe to skip initially</h2>
+<p class="empty">Safe to skip on first read unless you detect a mismatch.</p>
+<ul>${skip}</ul>
+<h2>Capsule preview (${esc(mode)} · ${esc(target)})</h2>
+<pre>${esc(rendered.text)}</pre>
+<h2>Create &amp; export</h2>
+<dl class="kv">
+  <dt>CLI</dt><dd><code>kairo capsule --mode ${esc(mode)} --target ${esc(target)}</code></dd>
+  <dt>Write file</dt><dd><code>kairo capsule --target ${esc(target)} --output capsule.md</code></dd>
+  <dt>AGENTS.md (Codex)</dt><dd><code>kairo capsule --target codex --agents-md</code></dd>
+  <dt>MCP tool</dt><dd><code>kairo_capsule_create</code> (mode / target / includeAgentsMd)</dd>
+</dl>
+<p class="empty">Interactive create/copy/download buttons are intentionally not in
+this read-only inspector (it never writes). Use the CLI or MCP tool for those.</p>`;
 }

@@ -16,7 +16,11 @@ import {
   renderSession,
   renderSessions,
   renderTimeline,
+  renderCapsules,
 } from './render.js';
+import { createCapsule } from '../core/capsule/index.js';
+import { CAPSULE_MODES, CAPSULE_TARGETS } from '../core/capsule/capsuleTypes.js';
+import type { CapsuleMode, CapsuleTarget } from '../core/capsule/capsuleTypes.js';
 import type { TimelineKind } from '../core/query/types.js';
 import { handleAtlas, isAtlasPath, ATLAS_CSP } from './atlas/atlasRoutes.js';
 
@@ -146,6 +150,24 @@ async function handle(
     if (md === undefined)
       return send(404, page('Brief', '/checkpoints', `<p class="empty">Not found.</p>`));
     return send(200, page(`Brief ${name}`, '/checkpoints', renderContinuation(name, md)));
+  }
+  if (path === '/capsules') {
+    // Read-only generated preview (ADR-0020). This view NEVER writes — no
+    // AGENTS.md, no files. mode/target are chosen via query-string links.
+    const modeParam = url.searchParams.get('mode');
+    const targetParam = url.searchParams.get('target');
+    const mode: CapsuleMode = CAPSULE_MODES.includes(modeParam as CapsuleMode)
+      ? (modeParam as CapsuleMode)
+      : 'standard';
+    const target: CapsuleTarget = CAPSULE_TARGETS.includes(targetParam as CapsuleTarget)
+      ? (targetParam as CapsuleTarget)
+      : 'generic';
+    const cp = await p.latestCheckpoint();
+    const { rendered } = await createCapsule({ mode, target, projectRoot: p.paths.root });
+    return send(
+      200,
+      page('Capsules', '/capsules', renderCapsules(rendered, mode, target, cp !== undefined)),
+    );
   }
   if (path === '/timeline') {
     const kind = (url.searchParams.get('kind') ?? 'checkpoints') as TimelineKind;
