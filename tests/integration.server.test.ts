@@ -272,4 +272,46 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     expect(text).toContain('stable');
     expect(text).toContain('kairo_session_start');
   });
+
+  it('kairo_capsule_create returns a budgeted capsule with the documented schema', async () => {
+    const r = await client.callTool({
+      name: 'kairo_capsule_create',
+      arguments: { mode: 'standard', target: 'codex' },
+    });
+    const text = textOf(r);
+    // Compact summary first, then a fenced JSON block.
+    expect(text).toContain('Capsule (standard/codex)');
+    const m = text.match(/```json\n([\s\S]*?)```/);
+    expect(m).not.toBeNull();
+    const data = JSON.parse(m![1]!) as Record<string, unknown>;
+    // Documented output fields.
+    for (const key of [
+      'mode',
+      'target',
+      'chars',
+      'truncated',
+      'maxChars',
+      'readFirst',
+      'skipInitially',
+    ]) {
+      expect(data).toHaveProperty(key);
+    }
+    expect(data.mode).toBe('standard');
+    expect(data.target).toBe('codex');
+    expect(typeof data.chars).toBe('number');
+    // Budget is respected end-to-end.
+    expect(data.chars as number).toBeLessThanOrEqual(data.maxChars as number);
+    // No absolute project path leaks into the capsule text.
+    expect(text).not.toContain(projectRoot);
+  });
+
+  it('a tiny capsule is genuinely small (compactness)', async () => {
+    const r = await client.callTool({
+      name: 'kairo_capsule_create',
+      arguments: { mode: 'tiny' },
+    });
+    const m = textOf(r).match(/```json\n([\s\S]*?)```/);
+    const data = JSON.parse(m![1]!) as { chars: number };
+    expect(data.chars).toBeLessThanOrEqual(1500);
+  });
 });

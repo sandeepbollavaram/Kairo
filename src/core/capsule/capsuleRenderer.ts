@@ -121,6 +121,9 @@ function renderFull(p: CapsuleProjection, target: CapsuleTarget, b: CapsuleBudge
       `- **Latest checkpoint:** ${p.latestCheckpointId} (${p.checkpointReason ?? '?'}${p.checkpointAt ? `, ${p.checkpointAt}` : ''})`,
     );
   }
+  if (!p.latestCheckpointId) {
+    L.push(`- _No checkpoint yet — this capsule is derived from repo intelligence only._`);
+  }
   L.push('');
   L.push(`## Current task`);
   L.push(p.task ?? '_No task recorded._');
